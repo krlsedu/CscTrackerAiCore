@@ -1,20 +1,20 @@
 # CscTrackerAiCore
 
-CscTrackerAiCore È uma biblioteca Python desenvolvida para facilitar a integraÁ„o com modelos de IA, especificamente o Google Gemini, oferecendo robustez atravÈs de rotaÁ„o de chaves de API e observabilidade com ClickHouse.
+CscTrackerAiCore √© uma biblioteca Python desenvolvida para facilitar a integra√ß√£o com modelos de IA, especificamente o Google Gemini, oferecendo robustez atrav√©s de rota√ß√£o de chaves de API e observabilidade com ClickHouse.
 
 ## Principais Funcionalidades
 
-- **IntegraÁ„o com Google Gemini**: Suporte para an·lise de textos e imagens (base64) utilizando os modelos generativos do Google.
-- **RotaÁ„o Inteligente de Chaves (API Key Rotation)**:
-    - Gerenciamento autom·tico de m˙ltiplas chaves de API (gratuitas e pagas).
-    - Mecanismo de fallback: tenta chaves gratuitas primeiro e migra para pagas se necess·rio.
-    - Tratamento de limites de quota (Error 429) com suspens„o tempor·ria de chaves/modelos atingidos.
-    - Retry autom·tico em caso de falhas.
+- **Integra√ß√£o com Google Gemini**: Suporte para an√°lise de textos e imagens (base64) utilizando os modelos generativos do Google.
+- **Rota√ß√£o Inteligente de Chaves (API Key Rotation)**:
+    - Gerenciamento autom√°tico de m√∫ltiplas chaves de API (gratuitas e pagas).
+    - Mecanismo de fallback: tenta chaves gratuitas primeiro e migra para pagas se necess√°rio.
+    - Tratamento de limites de quota (Error 429) com suspens√£o tempor√°ria de chaves/modelos atingidos.
+    - Retry autom√°tico em caso de falhas.
 - **Telemetria e Observabilidade**:
-    - IntegraÁ„o nativa com **ClickHouse** para log de eventos.
+    - Integra√ß√£o nativa com **ClickHouse** para log de eventos.
     - Registro detalhado de uso de tokens (input, output e imagem).
-    - PersistÍncia dos prompts, respostas e metadados das tarefas para auditoria e an·lise.
-- **Tratamento de Erros**: ExceÁıes customizadas para lidar com falhas especÌficas do serviÁo de IA.
+    - Persist√™ncia dos prompts, respostas e metadados das tarefas para auditoria e an√°lise.
+- **Tratamento de Erros**: Exce√ß√µes customizadas para lidar com falhas espec√≠ficas do servi√ßo de IA.
 
 ## Requisitos
 
@@ -22,23 +22,23 @@ CscTrackerAiCore È uma biblioteca Python desenvolvida para facilitar a integraÁ„
 - Google GenAI SDK
 - Clickhouse Connect
 
-## ConfiguraÁ„o e Uso
+## Configura√ß√£o e Uso
 
-### Exemplo B·sico
+### Exemplo B√°sico
 
 ```python
 from csctracker_ai_core.service.IaProcessor import IaProcessor
 
-# InicializaÁ„o do processador
+# Inicializa√ß√£o do processador
 processor = IaProcessor(
     host="seu-clickhouse-host",
     google_free_keys=["chave1", "chave2"],
     google_paid_keys=["chave_paga1"]
 )
 
-# Realizando uma an·lise
+# Realizando uma an√°lise
 resultado, tokens, event_id = processor.analisar_com_gemini(
-    input_text="Qual a capital da FranÁa?",
+    input_text="Qual a capital da Fran√ßa?",
     prompt="Responda de forma concisa.",
     task="pergunta_geral"
 )
@@ -47,9 +47,9 @@ print(f"Resultado: {resultado}")
 print(f"Tokens usados: {tokens}")
 ```
 
-## InstalaÁ„o
+## Instala√ß√£o
 
-As dependÍncias podem ser instaladas via `requirements.txt`:
+As depend√™ncias podem ser instaladas via `requirements.txt`:
 
 ```bash
 pip install -r requirements.txt
@@ -58,9 +58,9 @@ pip install -r requirements.txt
 ## Estrutura do Projeto
 
 - `IaProcessor`: Classe principal para interface com a IA.
-- `ApiKeyRotator`: Gerencia o ciclo de vida e seleÁ„o das chaves de API.
-- `ClickHouseDb`: Respons·vel pela conex„o e persistÍncia de dados no ClickHouse.
+- `ApiKeyRotator`: Gerencia o ciclo de vida e sele√ß√£o das chaves de API.
+- `ClickHouseDb`: Respons√°vel pela conex√£o e persist√™ncia de dados no ClickHouse.
 
-## LicenÁa
+## Licen√ßa
 
-Este projeto est· sob a licenÁa MIT. Consulte o arquivo `LICENSE` para mais detalhes.
+Este projeto est√° sob a licen√ßa MIT. Consulte o arquivo `LICENSE` para mais detalhes.
