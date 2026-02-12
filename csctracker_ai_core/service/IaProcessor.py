@@ -143,4 +143,4 @@ class IaProcessor:
     def estimate_tokens_rough(self, text):
         if not text:
             return
-        self.logger.info(f"Estimativa de tokens: {math.ceil(len(text) / 4)}")
+        self.logger.info(f"Estimativa de tokens: {math.ceil(len(text) / 3)}")
