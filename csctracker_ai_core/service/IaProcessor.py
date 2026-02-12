@@ -10,8 +10,8 @@ import uuid
 from google import genai
 from google.genai import types
 
-from service.ApiKeyRotator import APIKeyRotator
-from service.ClickHouseDb import ClickHouseDb
+from .ApiKeyRotator import APIKeyRotator
+from .ClickHouseDb import ClickHouseDb
 
 class GeminiServiceException(Exception):
     """
