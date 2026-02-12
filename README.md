@@ -4,10 +4,11 @@ CscTrackerAiCore é uma biblioteca Python desenvolvida para facilitar a integra�
 
 ## Principais Funcionalidades
 
-- **Integração com Google Gemini**: Suporte para análise de textos e imagens (base64) utilizando os modelos generativos do Google.
+- **Integração com Google Gemini**: Suporte para análise de textos e imagens (base64) utilizando os modelos generativos do Google, com suporte a filtragem por variante de modelo (`pro` ou `flash`).
 - **Rotação Inteligente de Chaves (API Key Rotation)**:
     - Gerenciamento automático de múltiplas chaves de API (gratuitas e pagas).
     - Mecanismo de fallback: tenta chaves gratuitas primeiro e migra para pagas se necessário.
+    - Suporte a seleção específica de variante de modelo (ex: garantir uso de `pro` ou `flash`).
     - Tratamento de limites de quota (Error 429) com suspensão temporária de chaves/modelos atingidos.
     - Retry automático em caso de falhas.
 - **Telemetria e Observabilidade**:
@@ -36,11 +37,19 @@ processor = IaProcessor(
     google_paid_keys=["chave_paga1"]
 )
 
-# Realizando uma análise
+# Realizando uma análise básica
 resultado, tokens, event_id = processor.analisar_com_gemini(
     input_text="Qual a capital da França?",
     prompt="Responda de forma concisa.",
     task="pergunta_geral"
+)
+
+# Realizando uma análise forçando uma variante específica (ex: flash)
+resultado_flash, tokens_flash, event_id_flash = processor.analisar_com_gemini(
+    input_text="Resuma o histórico da IA.",
+    prompt="Seja didático.",
+    task="resumo_ia",
+    model_variant="flash"
 )
 
 print(f"Resultado: {resultado}")

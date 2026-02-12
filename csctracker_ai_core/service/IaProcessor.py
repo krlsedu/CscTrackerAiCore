@@ -15,34 +15,36 @@ from .ClickHouseDb import ClickHouseDb
 
 class GeminiServiceException(Exception):
     """
-    Exception representing errors related to the Gemini service.
+    Represents a custom exception for the Gemini service.
 
-    This exception is used to handle and represent various errors that may occur
-    during interactions with the Gemini service. It is a custom exception that can
-    be used for error handling specific to this context.
+    This exception is designed to handle errors specific to the Gemini service
+    and can be used for custom error handling processes where more context or
+    a better understanding of the failure is required.
     """
     pass
 
 class IaProcessor:
     """
-    Processes input for an AI-based system with integrated API key rotation and database logging support.
+    IaProcessor class.
 
-    This class provides methods to perform analysis using the Gemini AI system, including handling image
-    and textual inputs. It incorporates a retry mechanism with automatic fallback between free and paid
-    API keys and logs telemetry data to a ClickHouse database.
+    This class facilitates interactions with a Gemini-based AI system, providing support for API key
+    rotation, automatic retries, and fallback strategies between free and paid keys. Its primary purpose
+    is to process and generate AI-driven content while managing telemetry and ensuring optimal utilization
+    of API capacities.
 
-    Attributes:
-        logger (logging.Logger): Logger instance for logging messages and errors.
-        api_key_rotator (APIKeyRotator): Manages API key rotation for free and paid API keys with
-                                         error handling capabilities.
-        click_house (ClickHouseDb): Handles database operations for logging telemetry data.
+    :ivar logger: Logger instance for logging messages and errors.
+    :type logger: logging.Logger
+    :ivar api_key_rotator: API key rotator instance for managing key selection and utilization.
+    :type api_key_rotator: APIKeyRotator
+    :ivar click_house: Database instance for storing telemetry and logging events.
+    :type click_house: ClickHouseDb
     """
     def __init__(self, host="localhost", port=8123, username='admin', password='admin', google_models_limits = None, google_free_keys = None, google_paid_keys = None):
         self.logger = logging.getLogger()
         self.api_key_rotator = APIKeyRotator(self.logger, google_models_limits, google_free_keys, google_paid_keys)
         self.click_house = ClickHouseDb(host, port, username, password)
 
-    def analisar_com_gemini(self, input_text: str = "", prompt: str = "", file_base64: str = None, task: str = None, return_json: bool = True, event_id: str = None, mime_type: str = "image/jpeg"):
+    def analisar_com_gemini(self, input_text: str = "", prompt: str = "", file_base64: str = None, task: str = None, return_json: bool = True, event_id: str = None, mime_type: str = "image/jpeg", model_variant: str = None):
         """
         Analisa utilizando Gemini com suporte a fallback Free -> Paid e Retry Automático.
         """
@@ -61,7 +63,7 @@ class IaProcessor:
         while tentativa_atual < max_tentativas:
             tentativa_atual += 1
 
-            key, model_name = rotator.select_and_reserve_best_slot()
+            key, model_name = rotator.select_and_reserve_best_slot(model_variant)
 
             if not key:
                 logger.warning("Nenhum slot disponível no momento. Aguardando...")

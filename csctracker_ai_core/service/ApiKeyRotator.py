@@ -11,19 +11,20 @@ from threading import Lock
 
 class APIKeyRotator:
     """
-    Manages API key rotation and prioritization for handling requests.
+    Handles rotation and management of API keys for free and paid tiers, ensuring
+    efficient use of resources, and balancing load across available keys and models.
 
-    This class is responsible for managing a pool of API keys, classified into free and paid tiers,
-    and prioritizing their usage based on cost-effectiveness and availability. It handles configuration,
-    key allocation, and load balancing via round-robin mechanisms across tiers, ensuring optimal
-    utilization of API keys. The class also tracks the active usage of keys across specific models
-    and implements dynamic key suspension for overloaded scenarios.
+    The `APIKeyRotator` class manages the configuration, organization, and allocation
+    of API keys, separating them into free and paid tiers. It tracks usage, enforces
+    rate limits, and detects when keys are invalid or suspended. This class also
+    prioritizes models based on cost and optimizes their usage across the tiers for
+    cost-efficiency.
 
-    Attributes:
-        logger: A logging.Logger instance used for logging operations.
-        google_models_limits: Configuration for model-specific API rate limits.
-        google_free_keys: List of free-tier API keys.
-        google_paid_keys: List of paid-tier API keys.
+    :ivar logger: The logger instance used for logging operations.
+    :type logger: logging.Logger
+    :ivar google_models_limits: Configured model limits, optional.
+    :ivar google_free_keys: Comma-separated free API keys, optional.
+    :ivar google_paid_keys: Comma-separated paid API keys, optional.
     """
     def __init__(self, logger: logging.Logger, google_models_limits = None, google_free_keys = None, google_paid_keys = None):
         self.logger = logger
@@ -173,7 +174,7 @@ class APIKeyRotator:
 
     # --- LÓGICA DE SELEÇÃO DE SLOT (CASCATA + ROUND ROBIN) ---
 
-    def select_and_reserve_best_slot(self):
+    def select_and_reserve_best_slot(self, model_variant: str = None):
         """
         Busca slot livre: 1º em Free Keys (RR), 2º em Paid Keys (RR).
         Retorna: (key, model) ou (None, None) se tudo estiver ocupado.
@@ -182,20 +183,20 @@ class APIKeyRotator:
             current_time = time.time()
 
             # TIER 1: Tenta Free Keys
-            key, model = self._find_slot_in_list(self._free_keys, self._free_index, current_time)
+            key, model = self._find_slot_in_list(self._free_keys, self._free_index, current_time, model_variant)
             if key:
                 self._free_index = (self._free_index + 1) % len(self._free_keys)
                 return key, model
 
             # TIER 2: Tenta Paid Keys (Fallback)
-            key, model = self._find_slot_in_list(self._paid_keys, self._paid_index, current_time)
+            key, model = self._find_slot_in_list(self._paid_keys, self._paid_index, current_time, model_variant)
             if key:
                 self._paid_index = (self._paid_index + 1) % len(self._paid_keys)
                 return key, model
 
             return None, None
 
-    def _find_slot_in_list(self, keys_list, start_index, current_time):
+    def _find_slot_in_list(self, keys_list, start_index, current_time, model_variant: str = None):
         """Helper para iterar numa lista circularmente (Round-Robin)."""
         count = len(keys_list)
         if count == 0: return None, None
@@ -206,6 +207,10 @@ class APIKeyRotator:
 
             # Itera sobre os modelos dessa chave (já ordenados por prioridade/custo)
             for model in self._models_by_key[key]:
+                # 0. Filtra por variante se informado
+                if model_variant and model_variant.lower() not in model.lower():
+                    continue
+
                 # 1. Verifica Suspensão
                 if model in self._suspended_until[key]:
                     if current_time < self._suspended_until[key][model]:
