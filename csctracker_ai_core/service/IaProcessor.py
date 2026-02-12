@@ -63,7 +63,7 @@ class IaProcessor:
         while tentativa_atual < max_tentativas:
             tentativa_atual += 1
 
-            key, model_name = rotator.select_and_reserve_best_slot(model_variant)
+            key, model_name, tier = rotator.select_and_reserve_best_slot(model_variant)
 
             if not key:
                 logger.warning("Nenhum slot disponível no momento. Aguardando...")
@@ -110,7 +110,7 @@ class IaProcessor:
                     {'input': input_tokens, 'image': image_tokens, 'output': output_tokens},
                     prompt_final,
                     response.text,
-                    model_name,
+                    f"{model_name}-{tier}",
                     task
                 )
 

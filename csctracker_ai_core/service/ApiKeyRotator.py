@@ -186,15 +186,15 @@ class APIKeyRotator:
             key, model = self._find_slot_in_list(self._free_keys, self._free_index, current_time, model_variant)
             if key:
                 self._free_index = (self._free_index + 1) % len(self._free_keys)
-                return key, model
+                return key, model, "free"
 
             # TIER 2: Tenta Paid Keys (Fallback)
             key, model = self._find_slot_in_list(self._paid_keys, self._paid_index, current_time, model_variant)
             if key:
                 self._paid_index = (self._paid_index + 1) % len(self._paid_keys)
-                return key, model
+                return key, model, "paid"
 
-            return None, None
+            return None, None, None
 
     def _find_slot_in_list(self, keys_list, start_index, current_time, model_variant: str = None):
         """Helper para iterar numa lista circularmente (Round-Robin)."""
