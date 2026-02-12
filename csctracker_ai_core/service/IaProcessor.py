@@ -42,7 +42,7 @@ class IaProcessor:
         self.api_key_rotator = APIKeyRotator(self.logger, google_models_limits, google_free_keys, google_paid_keys)
         self.click_house = ClickHouseDb(host, port, username, password)
 
-    def analisar_com_gemini(self, input_text: str = "", prompt: str = "", image_base64: str = None, task: str = None, return_json: bool = True, event_id: str = None):
+    def analisar_com_gemini(self, input_text: str = "", prompt: str = "", file_base64: str = None, task: str = None, return_json: bool = True, event_id: str = None, mime_type: str = "image/jpeg"):
         """
         Analisa utilizando Gemini com suporte a fallback Free -> Paid e Retry Automático.
         """
@@ -61,30 +61,27 @@ class IaProcessor:
         while tentativa_atual < max_tentativas:
             tentativa_atual += 1
 
-            # 1. Pede o melhor slot disponível (Free ou Paid)
             key, model_name = rotator.select_and_reserve_best_slot()
 
             if not key:
-                # Nenhuma chave disponível agora
                 logger.warning("Nenhum slot disponível no momento. Aguardando...")
                 time.sleep(1)
                 if tentativa_atual >= max_tentativas: break
                 continue
 
             try:
-                # 2. Executa a chamada
                 client = genai.Client(api_key=key)
                 contents = []
 
-                if not image_base64:
+                if not file_base64:
                     if return_json:
                         contents.append(f"Responda APENAS com um objeto JSON válido. Não use markdown. \n{prompt_final}")
                     else:
                         contents.append(prompt_final)
                 else:
                     contents.append(prompt_final)
-                    image_bytes = base64.b64decode(image_base64)
-                    contents.append(types.Part.from_bytes(data=image_bytes, mime_type="image/jpeg"))
+                    image_bytes = base64.b64decode(file_base64)
+                    contents.append(types.Part.from_bytes(data=image_bytes, mime_type=mime_type))
 
                 response = client.models.generate_content(
                     model=model_name,
@@ -114,7 +111,7 @@ class IaProcessor:
                     model_name,
                     task
                 )
-                # 3. Sucesso: Libera slot e retorna o JSON
+
                 rotator.liberar_slot_model(key, model_name)
 
                 try:
@@ -127,21 +124,18 @@ class IaProcessor:
                     continue
 
             except Exception as e:
-                # 4. Erro: Libera slot e reporta ao rotator para análise
+
                 rotator.liberar_slot_model(key, model_name)
 
                 foi_erro_de_cota = rotator.processar_exception(key, model_name, e)
 
                 if foi_erro_de_cota:
                     logger.warning(f"Cota excedida na tentativa {tentativa_atual}. Trocando chave...")
-                    # O loop 'continue' vai forçar select_and_reserve_best_slot a pegar outra chave
                     continue
                 else:
-                    # Erros de rede ou prompt inválido
                     logger.error(f"Erro na API Gemini: {e}")
                     continue
 
-        # Fim do loop sem sucesso
         logger.error("Todas as tentativas de conexão com o Gemini falharam.")
         raise GeminiServiceException(
             "Nossos sistemas de IA estão temporariamente sobrecarregados. Tente novamente em alguns minutos.")
