@@ -5,6 +5,10 @@ categories:
     labels: ['feat', 'feature']
   - title: '🐛 Correções (Bug Fixes)'
     labels: ['fix', 'bug']
+  - title: '📚 Documentação'
+    labels: ['docs', 'documentation']
+  - title: '🧰 Manutenção'
+    labels: ['chore', 'maintenance']
 template: |
   ## O que mudou
   $CHANGES
