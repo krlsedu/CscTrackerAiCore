@@ -1,5 +1,5 @@
-name-template: '$TAG'
-tag-template: '$TAG'
+name-template: $TAG
+tag-template: $TAG
 categories:
   - title: '🚀 Novidades (Features)'
     labels: ['feat', 'feature']
