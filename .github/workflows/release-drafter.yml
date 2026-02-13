@@ -2,7 +2,10 @@ name: Release Drafter
 
 on:
   push:
+    # Atualiza o rascunho em cada push na master
     branches: [master, main]
+    # PUBLICA a release quando uma tag v* é enviada
+    tags: ["v*"]
 
 jobs:
   update_release_draft:
@@ -14,5 +17,7 @@ jobs:
       - uses: release-drafter/release-drafter@v6
         with:
           config-name: release-drafter.yml
+          # A mágica do automático: publica se for uma TAG
+          publish: ${{ startsWith(github.ref, 'refs/tags/v') }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
