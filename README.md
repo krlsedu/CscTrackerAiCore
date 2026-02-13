@@ -4,7 +4,7 @@
 [![Python versions](https://img.shields.io/pypi/pyversions/csctracker-ai-core.svg)](https://pypi.org/project/csctracker-ai-core/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
-
+[![Downloads](https://img.shields.io/pepy/dt/csctracker-ai-core?label=downloads&color=green)](https://pepy.tech/project/csctracker-ai-core)
 
 CscTrackerAiCore é uma biblioteca Python desenvolvida para facilitar a integração com modelos de IA, especificamente o Google Gemini, oferecendo robustez através de rotação de chaves de API e observabilidade com ClickHouse.
 
