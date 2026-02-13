@@ -1,0 +1,19 @@
+name-template: 'v$RESOLVED_VERSION'
+tag-template: 'v$RESOLVED_VERSION'
+categories:
+  - title: '🚀 Novidades (Features)'
+    labels: ['feat', 'feature']
+  - title: '🐛 Correções (Bug Fixes)'
+    labels: ['fix', 'bug']
+  - title: '📚 Documentação'
+    labels: ['docs', 'documentation']
+  - title: '🧰 Manutenção'
+    labels: ['chore', 'maintenance']
+version-resolver:
+  default: patch
+template: |
+  ## O que mudou
+  $CHANGES
+
+  **Colaboradores:**
+  $CONTRIBUTORS
