@@ -4,8 +4,9 @@ import os
 import clickhouse_connect
 from datetime import datetime
 
+
 class ClickHouseDb:
-    def __init__(self, host="localhost", port=8123, username='admin', password='admin'):
+    def __init__(self, host="localhost", port=8123, username="admin", password="admin"):
         self.logger = logging.getLogger()
         self.host = os.getenv("CLICKHOUSE_HOST", host)
         self.port = int(os.getenv("CLICKHOUSE_PORT", port))
@@ -21,7 +22,7 @@ class ClickHouseDb:
             port=self.port,
             username=self.username,
             password=self.password,
-            database=self.database
+            database=self.database,
         )
 
     def init_db(self):
@@ -48,23 +49,34 @@ class ClickHouseDb:
     def log_event_telemetry(self, event_id, tokens, payload, result, model_name, task):
         try:
             _client = self.get_ch_client()
-            if not payload: payload = {}
+            if not payload:
+                payload = {}
             row = [
                 datetime.now(),
                 str(event_id),
-                tokens.get('input', 0),
-                tokens.get('image', 0),
-                tokens.get('output', 0),
-                json.dumps(payload, separators=(',', ':')),
+                tokens.get("input", 0),
+                tokens.get("image", 0),
+                tokens.get("output", 0),
+                json.dumps(payload, separators=(",", ":")),
                 result,
                 model_name,
-                task
+                task,
             ]
-            _client.insert('ai_events', [row], column_names=[
-                'timestamp', 'event_id', 'tokens_input', 'tokens_image',
-                'tokens_output', 'payload', 'result', 'model', 'task'
-            ])
+            _client.insert(
+                "ai_events",
+                [row],
+                column_names=[
+                    "timestamp",
+                    "event_id",
+                    "tokens_input",
+                    "tokens_image",
+                    "tokens_output",
+                    "payload",
+                    "result",
+                    "model",
+                    "task",
+                ],
+            )
             _client.close()
         except Exception as e:
             logging.error(f"Observabilidade falhou: {e}")
-

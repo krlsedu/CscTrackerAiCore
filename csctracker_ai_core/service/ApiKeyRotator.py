@@ -26,7 +26,14 @@ class APIKeyRotator:
     :ivar google_free_keys: Comma-separated free API keys, optional.
     :ivar google_paid_keys: Comma-separated paid API keys, optional.
     """
-    def __init__(self, logger: logging.Logger, google_models_limits = None, google_free_keys = None, google_paid_keys = None):
+
+    def __init__(
+        self,
+        logger: logging.Logger,
+        google_models_limits=None,
+        google_free_keys=None,
+        google_paid_keys=None,
+    ):
         self.logger = logger
         self.google_models_limits = google_models_limits
         self.google_free_keys = google_free_keys
@@ -55,7 +62,9 @@ class APIKeyRotator:
         self._regex_limit_zero = re.compile(r"limit:\s*0", re.IGNORECASE)
         self._regex_per_day = re.compile(r"(PerDay|Quota.*Day)", re.IGNORECASE)
         self._regex_per_minute = re.compile(r"(PerMinute|Quota.*Minute)", re.IGNORECASE)
-        self._regex_invalid_key = re.compile(r"(API_KEY_INVALID|key not valid|unauthorized)", re.IGNORECASE)
+        self._regex_invalid_key = re.compile(
+            r"(API_KEY_INVALID|key not valid|unauthorized)", re.IGNORECASE
+        )
 
         # 1. Carregar Configuração de Modelos (ENV ou Default)
         self._load_model_config()
@@ -71,8 +80,8 @@ class APIKeyRotator:
         2. Simples (Portainer Friendly): 'model=1,model2=10'
         """
         default_limits = {
-            'gemini-3-flash-preview': 1,
-            'gemini-2.5-flash': 1,
+            "gemini-3-flash-preview": 1,
+            "gemini-2.5-flash": 1,
         }
         env_config = self.google_models_limits or os.getenv("GOOGLE_MODEL_LIMITS")
 
@@ -81,10 +90,12 @@ class APIKeyRotator:
         if env_config:
             env_config = env_config.strip()
             # Tenta decodificar formato JSON (antigo)
-            if env_config.startswith('{'):
+            if env_config.startswith("{"):
                 try:
                     self._model_limits = json.loads(env_config)
-                    self.logger.info(f"Configuração (JSON) carregada: {self._model_limits}")
+                    self.logger.info(
+                        f"Configuração (JSON) carregada: {self._model_limits}"
+                    )
                 except json.JSONDecodeError:
                     self.logger.error("JSON inválido. Usando padrões.")
                     self._model_limits = default_limits
@@ -92,14 +103,18 @@ class APIKeyRotator:
             else:
                 try:
                     # Ex: "gemini-3-pro=4,gemini-2.5-pro=10"
-                    items = env_config.split(',')
+                    items = env_config.split(",")
                     for item in items:
-                        if '=' in item:
-                            key, value = item.split('=')
+                        if "=" in item:
+                            key, value = item.split("=")
                             self._model_limits[key.strip()] = int(value.strip())
-                    self.logger.info(f"Configuração (Simple) carregada: {self._model_limits}")
+                    self.logger.info(
+                        f"Configuração (Simple) carregada: {self._model_limits}"
+                    )
                 except Exception as e:
-                    self.logger.error(f"Erro ao ler config simples: {e}. Usando padrões.")
+                    self.logger.error(
+                        f"Erro ao ler config simples: {e}. Usando padrões."
+                    )
                     self._model_limits = default_limits
 
         # Se falhou ou veio vazio, usa default
@@ -113,9 +128,12 @@ class APIKeyRotator:
 
         def get_model_weight(model_name):
             m = model_name.lower()
-            if "ultra" in m: return 100
-            if "pro" in m: return 80
-            if "flash" in m: return 10
+            if "ultra" in m:
+                return 100
+            if "pro" in m:
+                return 80
+            if "flash" in m:
+                return 10
             return 50
 
         models_copy = self._models.copy()
@@ -134,7 +152,7 @@ class APIKeyRotator:
         # 1. Carregar FREE
         _keys_free_str = self.google_free_keys or os.getenv("GOOGLE_FREE_KEYS")
         if _keys_free_str:
-            keys = [k.strip() for k in _keys_free_str.split(',') if k.strip()]
+            keys = [k.strip() for k in _keys_free_str.split(",") if k.strip()]
             keys = list(dict.fromkeys(keys))  # Remove duplicatas
 
             # Nas Free, queremos usar o Pro primeiro
@@ -147,7 +165,7 @@ class APIKeyRotator:
         try:
             _keys_paid_str = self.google_paid_keys or os.getenv("GOOGLE_PAID_KEYS")
             if _keys_paid_str:
-                keys = [k.strip() for k in _keys_paid_str.split(',') if k.strip()]
+                keys = [k.strip() for k in _keys_paid_str.split(",") if k.strip()]
                 keys = list(dict.fromkeys(keys))
 
                 # Nas Pagas, queremos usar o Flash primeiro
@@ -159,7 +177,9 @@ class APIKeyRotator:
             pass
 
         self._all_keys_count = len(self._free_keys) + len(self._paid_keys)
-        self.logger.info(f"Rotator iniciado: {len(self._free_keys)} Free, {len(self._paid_keys)} Paid.")
+        self.logger.info(
+            f"Rotator iniciado: {len(self._free_keys)} Free, {len(self._paid_keys)} Paid."
+        )
 
     def _setup_key_state(self, key, sorted_models):
         if key not in self._models_by_key:
@@ -174,7 +194,12 @@ class APIKeyRotator:
 
     # --- LÓGICA DE SELEÇÃO DE SLOT (CASCATA + ROUND ROBIN) ---
 
-    def select_and_reserve_best_slot(self, model_variant: str = None, forced_paid: bool = False, forced_free: bool = False):
+    def select_and_reserve_best_slot(
+        self,
+        model_variant: str = None,
+        forced_paid: bool = False,
+        forced_free: bool = False,
+    ):
         """
         Busca slot livre: 1º em Free Keys (RR), 2º em Paid Keys (RR).
         Retorna: (key, model) ou (None, None) se tudo estiver ocupado.
@@ -184,24 +209,31 @@ class APIKeyRotator:
 
             # TIER 1: Tenta Free Keys
             if not forced_paid:
-                key, model = self._find_slot_in_list(self._free_keys, self._free_index, current_time, model_variant)
+                key, model = self._find_slot_in_list(
+                    self._free_keys, self._free_index, current_time, model_variant
+                )
                 if key:
                     self._free_index = (self._free_index + 1) % len(self._free_keys)
                     return key, model, "free"
 
             # TIER 2: Tenta Paid Keys (Fallback)
             if not forced_free:
-                key, model = self._find_slot_in_list(self._paid_keys, self._paid_index, current_time, model_variant)
+                key, model = self._find_slot_in_list(
+                    self._paid_keys, self._paid_index, current_time, model_variant
+                )
                 if key:
                     self._paid_index = (self._paid_index + 1) % len(self._paid_keys)
                     return key, model, "paid"
 
             return None, None, None
 
-    def _find_slot_in_list(self, keys_list, start_index, current_time, model_variant: str = None):
+    def _find_slot_in_list(
+        self, keys_list, start_index, current_time, model_variant: str = None
+    ):
         """Helper para iterar numa lista circularmente (Round-Robin)."""
         count = len(keys_list)
-        if count == 0: return None, None
+        if count == 0:
+            return None, None
 
         for i in range(count):
             idx = (start_index + i) % count
@@ -224,7 +256,9 @@ class APIKeyRotator:
                 limit = self._model_limits.get(model, 1)
                 if self._active_slots[key][model] < limit:
                     self._active_slots[key][model] += 1
-                    self.logger.info(f"Slot alocado: {model} (Free? {key in self._free_keys}) - Key: {key[:10]}...")
+                    self.logger.info(
+                        f"Slot alocado: {model} (Free? {key in self._free_keys}) - Key: {key[:10]}..."
+                    )
                     return key, model
 
         return None, None
@@ -252,32 +286,37 @@ class APIKeyRotator:
     def _tratar_erro_429(self, key, model, error_str):
         suspension_time = 60
         if self._regex_limit_zero.search(error_str):
-            suspension_time = 86400;
+            suspension_time = 86400
             reason = "Limit 0"
         elif self._regex_per_day.search(error_str):
-            suspension_time = self._calcular_segundos_ate_renovacao();
+            suspension_time = self._calcular_segundos_ate_renovacao()
             reason = "Cota Diária"
         elif self._regex_per_minute.search(error_str):
-            suspension_time = 120;
+            suspension_time = 120
             reason = "Cota RPM"
         else:
             reason = "429 Genérico"
 
-        self.logger.warning(f"Erro 429 ({reason}). Suspendendo {model} na key {key[:10]}... por {suspension_time}s")
+        self.logger.warning(
+            f"Erro 429 ({reason}). Suspendendo {model} na key {key[:10]}... por {suspension_time}s"
+        )
         self.suspender_modelo(key, model, suspension_time)
 
     def suspender_modelo(self, key, model, segundos):
         with self._lock:
-            if key not in self._models_by_key: return
+            if key not in self._models_by_key:
+                return
             liberacao_em = time.time() + segundos
             if model in self._suspended_until[key]:
-                if self._suspended_until[key][model] > liberacao_em: return
+                if self._suspended_until[key][model] > liberacao_em:
+                    return
             self._suspended_until[key][model] = liberacao_em
 
     def _calcular_segundos_ate_renovacao(self):
         now_utc = datetime.now(timezone.utc)
         target = now_utc.replace(hour=8, minute=0, second=0, microsecond=0)
-        if now_utc >= target: target += timedelta(days=1)
+        if now_utc >= target:
+            target += timedelta(days=1)
         return int((target - now_utc).total_seconds()) + 300
 
     def remove_key(self, key_to_remove):
