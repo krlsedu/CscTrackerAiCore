@@ -1,19 +1,23 @@
-name: Release Drafter
+name: Release por Arquivo
 on:
   push:
     tags: ["v*"]
+
 jobs:
-  update_release_draft:
+  release:
+    runs-on: ubuntu-latest
     permissions:
       contents: write
-      pull-requests: write
-    runs-on: ubuntu-latest
     steps:
-      - uses: release-drafter/release-drafter@v6
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Publicar Release
+        uses: softprops/action-gh-release@v1
         with:
-          config-name: release-drafter.yml
+          body_path: RELEASE_NOTES.md
+          tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
-          tag: ${{ github.ref_name }}
-          publish: ${{ startsWith(github.ref, 'refs/tags/v') }}
+          draft: false
+          prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
