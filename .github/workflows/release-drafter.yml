@@ -1,7 +1,6 @@
 name: Release Drafter
 on:
   push:
-    branches: [master, main]
     tags: ["v*"]
 jobs:
   update_release_draft:
