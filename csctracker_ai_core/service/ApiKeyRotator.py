@@ -174,7 +174,7 @@ class APIKeyRotator:
 
     # --- LÓGICA DE SELEÇÃO DE SLOT (CASCATA + ROUND ROBIN) ---
 
-    def select_and_reserve_best_slot(self, model_variant: str = None):
+    def select_and_reserve_best_slot(self, model_variant: str = None, forced_paid: bool = False, forced_free: bool = False):
         """
         Busca slot livre: 1º em Free Keys (RR), 2º em Paid Keys (RR).
         Retorna: (key, model) ou (None, None) se tudo estiver ocupado.
@@ -183,16 +183,18 @@ class APIKeyRotator:
             current_time = time.time()
 
             # TIER 1: Tenta Free Keys
-            key, model = self._find_slot_in_list(self._free_keys, self._free_index, current_time, model_variant)
-            if key:
-                self._free_index = (self._free_index + 1) % len(self._free_keys)
-                return key, model, "free"
+            if not forced_paid:
+                key, model = self._find_slot_in_list(self._free_keys, self._free_index, current_time, model_variant)
+                if key:
+                    self._free_index = (self._free_index + 1) % len(self._free_keys)
+                    return key, model, "free"
 
             # TIER 2: Tenta Paid Keys (Fallback)
-            key, model = self._find_slot_in_list(self._paid_keys, self._paid_index, current_time, model_variant)
-            if key:
-                self._paid_index = (self._paid_index + 1) % len(self._paid_keys)
-                return key, model, "paid"
+            if not forced_free:
+                key, model = self._find_slot_in_list(self._paid_keys, self._paid_index, current_time, model_variant)
+                if key:
+                    self._paid_index = (self._paid_index + 1) % len(self._paid_keys)
+                    return key, model, "paid"
 
             return None, None, None
 

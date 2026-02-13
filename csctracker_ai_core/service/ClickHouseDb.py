@@ -68,30 +68,3 @@ class ClickHouseDb:
         except Exception as e:
             logging.error(f"Observabilidade falhou: {e}")
 
-    def persist_code_quality(self, projeto, pull_request, usuario, pontuacao, complexidade, avaliacao, input_tokens, data=None, url=None, event_id=None):
-        if data is None: data = datetime.now()
-        url = url or ""
-        event_id = str(event_id) if event_id else ""
-
-        try:
-            _client = self.get_ch_client()
-            if not avaliacao: avaliacao = {}
-            row = [
-                data,
-                projeto,
-                pull_request,
-                usuario,
-                pontuacao,
-                complexidade,
-                json.dumps(avaliacao, separators=(',', ':')) if isinstance(avaliacao, dict) else avaliacao,
-                input_tokens,
-                url,
-                event_id
-            ]
-            _client.insert('code_quality', [row], column_names=[
-                'timestamp', 'projeto', 'pull_request', 'usuario',
-                'pontuacao', 'complexidade', 'avaliacao', 'input_tokens', 'url', 'event_id'
-            ])
-            _client.close()
-        except Exception as e:
-            logging.error(f"Persistência de qualidade falhou: {e}")

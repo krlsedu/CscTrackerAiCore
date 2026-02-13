@@ -44,7 +44,18 @@ class IaProcessor:
         self.api_key_rotator = APIKeyRotator(self.logger, google_models_limits, google_free_keys, google_paid_keys)
         self.click_house = ClickHouseDb(host, port, username, password)
 
-    def analisar_com_gemini(self, input_text: str = "", prompt: str = "", file_base64: str = None, task: str = None, return_json: bool = True, event_id: str = None, mime_type: str = "image/jpeg", model_variant: str = None):
+    def analisar_com_gemini(self,
+                            input_text: str = "",
+                            prompt: str = "",
+                            file_base64: str = None,
+                            task: str = None,
+                            return_json: bool = True,
+                            event_id: str = None,
+                            mime_type: str = "image/jpeg",
+                            model_variant: str = None,
+                            forced_free: bool = False,
+                            forced_paid: bool = False
+        ):
         """
         Analisa utilizando Gemini com suporte a fallback Free -> Paid e Retry Automático.
         """
@@ -63,7 +74,11 @@ class IaProcessor:
         while tentativa_atual < max_tentativas:
             tentativa_atual += 1
 
-            key, model_name, tier = rotator.select_and_reserve_best_slot(model_variant)
+            key, model_name, tier = rotator.select_and_reserve_best_slot(
+                model_variant=model_variant,
+                forced_free=forced_free,
+                forced_paid=forced_paid
+            )
 
             if not key:
                 logger.warning("Nenhum slot disponível no momento. Aguardando...")
