@@ -134,6 +134,9 @@ class IaProcessor:
 
                 input_tokens = response.usage_metadata.prompt_token_count
                 output_tokens = response.usage_metadata.candidates_token_count
+                if not output_tokens:
+                    logger.warning(f"No output tokens generated: {response.text}")
+                    output_tokens = 0
                 detalhes = response.usage_metadata.prompt_tokens_details
                 image_tokens = 0
                 if detalhes:
