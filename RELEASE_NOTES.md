@@ -1,13 +1,34 @@
-Com base no log fornecido, aqui estão as notas de lançamento para a versão **v26.07.029**. 
-
-Note que o log apresentado contém apenas um commit de automação de build.
+Aqui estão as Notas de Lançamento (Release Notes) para a versão **v26.09.001**, elaboradas com foco técnico e clareza.
 
 ---
 
-# Release Notes - v26.07.029
+# 📝 Release Notes - v26.09.001
 
-## 🔧 Chore / Manutenção Técnica
-* **Atualização de Build:** Incremento do arquivo de versão (`version.txt`) e disparo do pipeline de build automatizado para a versão 26.07.028.
+## Resumo
+Esta versão foca na resiliência do processamento de dados provenientes de modelos de IA, garantindo que a ausência de metadados de consumo não interrompa o fluxo principal da aplicação.
 
 ---
-*Nota: Não foram identificadas novas funcionalidades (Features) ou correções de erros (Bug Fixes) no log de commits fornecido para esta análise.*
+
+## 🐛 Fixes
+
+*   **Tratamento de Metadados no `IaProcessor`**: Implementada uma proteção para casos onde o campo `output_tokens` não é retornado pelo provedor de IA. 
+    *   Agora, o sistema atribui um valor padrão (fallback) em vez de lançar uma exceção.
+    *   Adicionada uma sinalização via log (Warning) para monitoramento de inconsistências nas respostas da API.
+    *   *Arquivo afetado:* `csctracker_ai_core/service/IaProcessor.py`
+
+---
+
+## 🚀 Features
+*   *Nenhuma nova funcionalidade nesta versão.*
+
+---
+
+## 🔧 Chore
+*   *Nenhuma alteração de infraestrutura ou manutenção nesta versão.*
+
+---
+
+**Build Info:**
+- **Versão:** `v26.09.001`
+- **Commit Base:** `7b26a92`
+- **Data:** 2026
