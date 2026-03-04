@@ -1,34 +1,26 @@
-Aqui estão as Notas de Lançamento (Release Notes) para a versão **v26.09.001**, elaboradas com foco técnico e clareza.
+Aqui estão as notas de lançamento para a versão **v26.10.001**, focadas em melhorias de observabilidade e telemetria do motor de IA.
 
 ---
 
-# 📝 Release Notes - v26.09.001
-
-## Resumo
-Esta versão foca na resiliência do processamento de dados provenientes de modelos de IA, garantindo que a ausência de metadados de consumo não interrompa o fluxo principal da aplicação.
-
----
-
-## 🐛 Fixes
-
-*   **Tratamento de Metadados no `IaProcessor`**: Implementada uma proteção para casos onde o campo `output_tokens` não é retornado pelo provedor de IA. 
-    *   Agora, o sistema atribui um valor padrão (fallback) em vez de lançar uma exceção.
-    *   Adicionada uma sinalização via log (Warning) para monitoramento de inconsistências nas respostas da API.
-    *   *Arquivo afetado:* `csctracker_ai_core/service/IaProcessor.py`
-
----
+# 📝 Release Notes - v26.10.001
 
 ## 🚀 Features
-*   *Nenhuma nova funcionalidade nesta versão.*
 
----
+### Observabilidade e Performance
+* **Rastreamento de Tempo de Processamento:** Implementada a captura da métrica `time_spent` dentro do `IaProcessor`. Esta melhoria permite mensurar com precisão o tempo de execução das tarefas de Inteligência Artificial, facilitando a identificação de gargalos operacionais.
+* **Atualização de Schema (ClickHouse):** Atualizado o esquema do banco de dados ClickHouse para suportar a persistência da nova métrica `time_spent`. Isso possibilita a criação de dashboards de performance e análise histórica de latência.
+
+## 🐛 Fixes
+* *Nenhuma correção de bug reportada nesta versão.*
 
 ## 🔧 Chore
-*   *Nenhuma alteração de infraestrutura ou manutenção nesta versão.*
+* *Nenhuma alteração de infraestrutura ou manutenção interna nesta versão.*
 
 ---
+### Detalhes Técnicos
+- **Commit Base:** `5321ad0`
+- **Arquivos Afetados:**
+  - `csctracker_ai_core/service/ClickHouseDb.py` (Migração de Schema)
+  - `csctracker_ai_core/service/IaProcessor.py` (Lógica de Telemetria)
 
-**Build Info:**
-- **Versão:** `v26.09.001`
-- **Commit Base:** `7b26a92`
-- **Data:** 2026
+**Tech Lead:** Carlos Eduardo Duarte Schwalm (@krlsedu)
