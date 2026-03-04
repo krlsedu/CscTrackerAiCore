@@ -1,26 +1,32 @@
-Aqui estão as notas de lançamento para a versão **v26.10.001**, focadas em melhorias de observabilidade e telemetria do motor de IA.
+Aqui estão as Notas de Lançamento (Release Notes) para a versão **v26.10.002**, elaboradas com foco técnico e clareza para a equipe de engenharia.
 
 ---
 
-# 📝 Release Notes - v26.10.001
+# 📝 Release Notes - v26.10.002
+
+## Resumo
+Esta versão foca na expansão das capacidades de observabilidade e métricas do motor de IA, introduzindo novos campos de rastreamento temporal no banco de dados analítico ClickHouse.
+
+---
 
 ## 🚀 Features
 
-### Observabilidade e Performance
-* **Rastreamento de Tempo de Processamento:** Implementada a captura da métrica `time_spent` dentro do `IaProcessor`. Esta melhoria permite mensurar com precisão o tempo de execução das tarefas de Inteligência Artificial, facilitando a identificação de gargalos operacionais.
-* **Atualização de Schema (ClickHouse):** Atualizado o esquema do banco de dados ClickHouse para suportar a persistência da nova métrica `time_spent`. Isso possibilita a criação de dashboards de performance e análise histórica de latência.
+*   **Expansão do Schema de Eventos de IA:** Adição da coluna `time_spent` à tabela `ai_events` no ClickHouse. 
+    *   *Impacto:* Permite a mensuração precisa do tempo de processamento de cada evento de IA, facilitando a criação de dashboards de performance e identificação de gargalos.
+    *   *Resiliência:* A migração foi implementada com tratamento de erros robusto para garantir a integridade do schema durante o processo de atualização.
 
 ## 🐛 Fixes
-* *Nenhuma correção de bug reportada nesta versão.*
+*   Nenhuma correção de bug reportada nesta versão.
 
 ## 🔧 Chore
-* *Nenhuma alteração de infraestrutura ou manutenção interna nesta versão.*
+*   Manutenção preventiva no módulo `ClickHouseDb.py` para suporte a evoluções de schema dinâmicas.
 
 ---
-### Detalhes Técnicos
-- **Commit Base:** `5321ad0`
-- **Arquivos Afetados:**
-  - `csctracker_ai_core/service/ClickHouseDb.py` (Migração de Schema)
-  - `csctracker_ai_core/service/IaProcessor.py` (Lógica de Telemetria)
 
-**Tech Lead:** Carlos Eduardo Duarte Schwalm (@krlsedu)
+### 🛠 Detalhes Técnicos
+*   **Commit:** `bc65cb1`
+*   **Módulo Afetado:** `csctracker_ai_core/service/ClickHouseDb.py`
+*   **Autor:** Carlos Eduardo Duarte Schwalm (krlsedu)
+
+---
+*Tech Lead: @krlsedu*
