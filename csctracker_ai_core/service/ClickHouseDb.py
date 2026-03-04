@@ -46,6 +46,16 @@ class ClickHouseDb:
             _client.close()
         except Exception as e:
             logging.error(f"Falha ao inicializar banco: {e}")
+        try:
+            _client = self.get_ch_client()
+            _client.command("""
+            alter table ai_events
+                add column if not exists time_spent Float;
+            """)
+            _client.close()
+        except Exception as e:
+            logging.error(f"Falha ao adicionar coluna time_spent: {e}")
+
 
     def log_event_telemetry(self, event_id, tokens, payload, result, model_name, task, time_spent):
         try:
