@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import base64
+import datetime
 import json
 import logging
 import math
@@ -121,6 +122,7 @@ class IaProcessor:
                         types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
                     )
 
+                _before = datetime.datetime.now()
                 response = client.models.generate_content(
                     model=model_name,
                     contents=contents,
@@ -131,6 +133,8 @@ class IaProcessor:
                         ),
                     ),
                 )
+                _time_spent = datetime.datetime.now() - _before
+                _time_spent = _time_spent.total_seconds()
 
                 input_tokens = response.usage_metadata.prompt_token_count
                 output_tokens = response.usage_metadata.candidates_token_count
@@ -157,6 +161,7 @@ class IaProcessor:
                     response.text,
                     f"{model_name}-{tier}",
                     task,
+                    _time_spent,
                 )
 
                 rotator.liberar_slot_model(key, model_name)

@@ -38,7 +38,8 @@ class ClickHouseDb:
                 payload String CODEC(ZSTD(9)),
                 result String CODEC(ZSTD(9)),
                 model String CODEC(ZSTD(9)),
-                task String CODEC(ZSTD(9)) 
+                task String CODEC(ZSTD(9)),
+                time_spent Float 
             ) ENGINE = MergeTree()
             ORDER BY timestamp
             """)
@@ -46,7 +47,7 @@ class ClickHouseDb:
         except Exception as e:
             logging.error(f"Falha ao inicializar banco: {e}")
 
-    def log_event_telemetry(self, event_id, tokens, payload, result, model_name, task):
+    def log_event_telemetry(self, event_id, tokens, payload, result, model_name, task, time_spent):
         try:
             _client = self.get_ch_client()
             if not payload:
@@ -61,6 +62,7 @@ class ClickHouseDb:
                 result,
                 model_name,
                 task,
+                time_spent
             ]
             _client.insert(
                 "ai_events",
@@ -75,6 +77,7 @@ class ClickHouseDb:
                     "result",
                     "model",
                     "task",
+                    "time_spent"
                 ],
             )
             _client.close()
