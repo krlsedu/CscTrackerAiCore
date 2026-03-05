@@ -6,12 +6,12 @@ from datetime import datetime
 
 
 class ClickHouseDb:
-    def __init__(self, host="localhost", port=8123, username="admin", password="admin"):
+    def __init__(self, host=None, port=None, username=None, password=None):
         self.logger = logging.getLogger()
-        self.host = os.getenv("CLICKHOUSE_HOST", host)
-        self.port = int(os.getenv("CLICKHOUSE_PORT", port))
-        self.username = os.getenv("CLICKHOUSE_USER", username)
-        self.password = os.getenv("CLICKHOUSE_PASSWORD", password)
+        self.host = host or os.getenv("CLICKHOUSE_HOST", "localhost")
+        self.port = port or int(os.getenv("CLICKHOUSE_PORT", 8123))
+        self.username = username or os.getenv("CLICKHOUSE_USER", "admin")
+        self.password = password or os.getenv("CLICKHOUSE_PASSWORD", "admin")
         self.database = os.getenv("CLICKHOUSE_DB", "default")
 
         self.init_db()

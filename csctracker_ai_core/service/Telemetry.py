@@ -40,7 +40,7 @@ class DateUtils:
         elif period == "week":
             start_date = now - timedelta(days=7)
         elif period == "thisWeek":
-            # Início na segunda-feira
+            # InÃ­cio na segunda-feira
             start_date = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
         elif period == "month":
             start_date = now - timedelta(days=30)
@@ -67,13 +67,13 @@ class Telemetry:
         start_date, end_date = DateUtils.get_period_dates(period)
 
         group_formats = {
-            "year": "%Y",
-            "month": "%Y-%m",
-            "day": "%Y-%m-%d",
-            "hour": "%H"
+            "year": "%%Y",
+            "month": "%%Y-%%m",
+            "day": "%%Y-%%m-%%d",
+            "hour": "%%H"
         }
 
-        group_format = group_formats.get(group, "%H")
+        group_format = group_formats.get(group, "%%H")
 
         sql = f"""
 SELECT e.task as task,
@@ -132,12 +132,12 @@ FROM (
                    ON e.join_key = r.join_key
                        AND toDate(e.timestamp) >= r.date
 
-WHERE e.model LIKE '%-paid'
+WHERE e.model LIKE '%%-paid'
 GROUP BY data
        , e.task
 ORDER BY data DESC,
          custo_medio_por_dia desc,
-         custo_total_reais DESC;
+         custo_total_reais DESC
         """
 
         params = {
