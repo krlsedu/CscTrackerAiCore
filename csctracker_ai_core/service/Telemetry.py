@@ -10,6 +10,42 @@ class DateUtils:
         end_date = now
         start_date = now
 
+        if "|" in period:
+            parts = period.split("|")
+            start_str = parts[0].strip()
+            end_str = parts[1].strip()
+
+            def parse_date(date_str: str, is_end: bool = False):
+                try:
+                    # fromisoformat handles YYYY-MM-DD, YYYY-MM-DDTHH:MM:SS, etc.
+                    # Handle Z for UTC and space as T separator
+                    clean_str = date_str.replace("Z", "+00:00").replace(" ", "T")
+                    # If it's just YYYY-MM-DD, it will have length 10
+                    dt = datetime.fromisoformat(clean_str)
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    
+                    # If only date was provided (no time part), adjust end_date to end of day
+                    if len(date_str.strip()) <= 10 and is_end:
+                         dt = dt.replace(hour=23, minute=59, second=59, microsecond=999999)
+                    
+                    return dt
+                except ValueError:
+                    # Fallback for common formats
+                    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+                        try:
+                            dt = datetime.strptime(date_str.strip(), fmt).replace(tzinfo=timezone.utc)
+                            if fmt == "%Y-%m-%d" and is_end:
+                                dt = dt.replace(hour=23, minute=59, second=59, microsecond=999999)
+                            return dt
+                        except ValueError:
+                            continue
+                    return now
+
+            start_date = parse_date(start_str)
+            end_date = parse_date(end_str, is_end=True)
+            return start_date, end_date
+
         if period == "1m":
             start_date = now - timedelta(minutes=1)
         elif period == "5m":
@@ -50,6 +86,49 @@ class DateUtils:
             start_date = now - timedelta(days=365)
         elif period == "thisYear":
             start_date = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+        elif period == "lastWeek":
+            # Semana passada completa (segunda a domingo)
+            start_date = (now - timedelta(days=now.weekday() + 7)).replace(hour=0, minute=0, second=0, microsecond=0)
+            end_date = (start_date + timedelta(days=7)).replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(microseconds=1)
+        elif period == "lastMonth":
+            # Mês passado completo
+            first_day_this_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            end_date = first_day_this_month - timedelta(microseconds=1)
+            start_date = (first_day_this_month - timedelta(days=1)).replace(day=1)
+        elif period == "lastYear":
+            # Ano passado completo
+            start_date = now.replace(year=now.year - 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+            end_date = now.replace(year=now.year, month=1, day=1, hour=0, minute=0, second=0, microsecond=0) - timedelta(microseconds=1)
+        elif period == "semester":
+            # Semestre atual
+            if now.month <= 6:
+                start_date = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+            else:
+                start_date = now.replace(month=7, day=1, hour=0, minute=0, second=0, microsecond=0)
+        elif period == "lastSemester":
+            # Semestre passado
+            if now.month <= 6:
+                start_date = now.replace(year=now.year - 1, month=7, day=1, hour=0, minute=0, second=0, microsecond=0)
+                end_date = now.replace(year=now.year, month=1, day=1, hour=0, minute=0, second=0, microsecond=0) - timedelta(microseconds=1)
+            else:
+                start_date = now.replace(month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+                end_date = now.replace(month=7, day=1, hour=0, minute=0, second=0, microsecond=0) - timedelta(microseconds=1)
+        elif period == "quarter":
+            # Trimestre atual
+            quarter_month = ((now.month - 1) // 3) * 3 + 1
+            start_date = now.replace(month=quarter_month, day=1, hour=0, minute=0, second=0, microsecond=0)
+        elif period == "lastQuarter":
+            # Trimestre passado
+            current_quarter_start_month = ((now.month - 1) // 3) * 3 + 1
+            first_day_current_quarter = now.replace(month=current_quarter_start_month, day=1, hour=0, minute=0, second=0, microsecond=0)
+            end_date = first_day_current_quarter - timedelta(microseconds=1)
+            
+            last_quarter_start_month = current_quarter_start_month - 3
+            last_quarter_year = now.year
+            if last_quarter_start_month <= 0:
+                last_quarter_start_month += 12
+                last_quarter_year -= 1
+            start_date = now.replace(year=last_quarter_year, month=last_quarter_start_month, day=1, hour=0, minute=0, second=0, microsecond=0)
         elif period == "max":
             start_date = datetime(1970, 1, 1, tzinfo=timezone.utc)
             end_date = datetime(2099, 12, 31, 23, 59, 59, tzinfo=timezone.utc)
