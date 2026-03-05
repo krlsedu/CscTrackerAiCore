@@ -1,32 +1,26 @@
-Aqui estão as Notas de Lançamento (Release Notes) para a versão **v26.10.002**, elaboradas com foco técnico e clareza para a equipe de engenharia.
+Aqui estão as Notas de Lançamento (Release Notes) para a versão **v26.10.003**, focadas em melhorias de infraestrutura de dados e observabilidade.
 
 ---
 
-# 📝 Release Notes - v26.10.002
+# 📝 Release Notes - v26.10.003
 
 ## Resumo
-Esta versão foca na expansão das capacidades de observabilidade e métricas do motor de IA, introduzindo novos campos de rastreamento temporal no banco de dados analítico ClickHouse.
+Esta versão foca na implementação do novo motor de telemetria e na flexibilização da camada de persistência com ClickHouse, garantindo maior consistência na extração de métricas agregadas.
 
 ---
 
 ## 🚀 Features
-
-*   **Expansão do Schema de Eventos de IA:** Adição da coluna `time_spent` à tabela `ai_events` no ClickHouse. 
-    *   *Impacto:* Permite a mensuração precisa do tempo de processamento de cada evento de IA, facilitando a criação de dashboards de performance e identificação de gargalos.
-    *   *Resiliência:* A migração foi implementada com tratamento de erros robusto para garantir a integridade do schema durante o processo de atualização.
+*   **Novo Serviço de Telemetria:** Implementação do serviço `Telemetry`, permitindo a extração de dados agregados com suporte a períodos de tempo customizáveis. Esta funcionalidade centraliza a observabilidade de performance e uso do core de IA.
 
 ## 🐛 Fixes
-*   Nenhuma correção de bug reportada nesta versão.
+*   **Consistência em Queries SQL:** Ajuste na formatação de caracteres de porcentagem (`%%`) nas queries de telemetria. Essa correção previne erros de interpolação de strings em drivers SQL, garantindo a execução correta de cálculos de métricas.
 
 ## 🔧 Chore
-*   Manutenção preventiva no módulo `ClickHouseDb.py` para suporte a evoluções de schema dinâmicas.
+*   **Refatoração do `ClickHouseDb`:** Atualização do método de inicialização da classe de conexão com ClickHouse para suportar parâmetros opcionais. Isso aumenta a flexibilidade para diferentes ambientes e configurações de conexão sem quebrar a compatibilidade.
 
 ---
 
 ### 🛠 Detalhes Técnicos
-*   **Commit:** `bc65cb1`
-*   **Módulo Afetado:** `csctracker_ai_core/service/ClickHouseDb.py`
-*   **Autor:** Carlos Eduardo Duarte Schwalm (krlsedu)
-
----
-*Tech Lead: @krlsedu*
+*   **Arquivos alterados:** 2
+*   **Commits analisados:** `d00e490`, `dfde023`
+*   **Impacto:** Camada de serviço e integração com banco de dados.
