@@ -1,26 +1,15 @@
-Aqui estão as Notas de Lançamento (Release Notes) para a versão **v26.10.003**, focadas em melhorias de infraestrutura de dados e observabilidade.
+Aqui estão as Notas de Lançamento para a versão **v26.10.004**, focadas em melhorias de infraestrutura de código e atualização de dependências.
 
 ---
 
-# 📝 Release Notes - v26.10.003
-
-## Resumo
-Esta versão foca na implementação do novo motor de telemetria e na flexibilização da camada de persistência com ClickHouse, garantindo maior consistência na extração de métricas agregadas.
-
----
+# 📦 Release Notes - v26.10.004
 
 ## 🚀 Features
-*   **Novo Serviço de Telemetria:** Implementação do serviço `Telemetry`, permitindo a extração de dados agregados com suporte a períodos de tempo customizáveis. Esta funcionalidade centraliza a observabilidade de performance e uso do core de IA.
-
-## 🐛 Fixes
-*   **Consistência em Queries SQL:** Ajuste na formatação de caracteres de porcentagem (`%%`) nas queries de telemetria. Essa correção previne erros de interpolação de strings em drivers SQL, garantindo a execução correta de cálculos de métricas.
+- **Refatoração do `IaProcessor`**: Melhoria na inicialização da classe `IaProcessor`, que agora suporta parâmetros opcionais para configurações de conexão. Isso garante maior flexibilidade no setup do serviço e facilita a integração em diferentes ambientes sem a necessidade de definições rígidas de parâmetros.
 
 ## 🔧 Chore
-*   **Refatoração do `ClickHouseDb`:** Atualização do método de inicialização da classe de conexão com ClickHouse para suportar parâmetros opcionais. Isso aumenta a flexibilidade para diferentes ambientes e configurações de conexão sem quebrar a compatibilidade.
+- **Atualização de Dependências**: Upgrade da biblioteca `csctracker-py-core` para a versão `26.9.3`, garantindo compatibilidade com as últimas correções e funcionalidades do core do ecossistema.
 
 ---
-
-### 🛠 Detalhes Técnicos
-*   **Arquivos alterados:** 2
-*   **Commits analisados:** `d00e490`, `dfde023`
-*   **Impacto:** Camada de serviço e integração com banco de dados.
+**Tech Lead:** Carlos Eduardo Duarte Schwalm (krlsedu)
+**Commit:** `baa9922`
