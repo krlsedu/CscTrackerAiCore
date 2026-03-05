@@ -16,25 +16,28 @@ class DateUtils:
             end_str = parts[1].strip()
 
             def parse_date(date_str: str, is_end: bool = False):
+                date_str = date_str.strip()
                 try:
+                    # Prioritariamente tenta o ISO format para suportar offsets/fusos
                     # fromisoformat handles YYYY-MM-DD, YYYY-MM-DDTHH:MM:SS, etc.
                     # Handle Z for UTC and space as T separator
                     clean_str = date_str.replace("Z", "+00:00").replace(" ", "T")
-                    # If it's just YYYY-MM-DD, it will have length 10
                     dt = datetime.fromisoformat(clean_str)
                     if dt.tzinfo is None:
                         dt = dt.replace(tzinfo=timezone.utc)
+                    else:
+                        dt = dt.astimezone(timezone.utc)
                     
-                    # If only date was provided (no time part), adjust end_date to end of day
-                    if len(date_str.strip()) <= 10 and is_end:
+                    # Se apenas data foi fornecida (sem hora), ajusta end_date para final do dia
+                    if len(date_str) <= 10 and is_end:
                          dt = dt.replace(hour=23, minute=59, second=59, microsecond=999999)
                     
                     return dt
                 except ValueError:
-                    # Fallback for common formats
+                    # Fallback para os formatos específicos sem fuso
                     for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
                         try:
-                            dt = datetime.strptime(date_str.strip(), fmt).replace(tzinfo=timezone.utc)
+                            dt = datetime.strptime(date_str, fmt).replace(tzinfo=timezone.utc)
                             if fmt == "%Y-%m-%d" and is_end:
                                 dt = dt.replace(hour=23, minute=59, second=59, microsecond=999999)
                             return dt
