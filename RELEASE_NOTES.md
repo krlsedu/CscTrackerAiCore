@@ -1,17 +1,15 @@
-Aqui estão as Notas de Lançamento para a versão **v26.10.006**, detalhando as alterações técnicas implementadas.
+Aqui estão as Notas de Lançamento para a versão **v26.10.007**, focadas em melhorias de infraestrutura e automação.
 
 ---
 
-# 📝 Release Notes - v26.10.006
-
-## 🚀 Features
-* **Refatoração do Serviço de Telemetria:** Otimização da query SQL no módulo `Telemetry.py` para suportar a formatação dinâmica de agrupamentos. Essa alteração permite maior flexibilidade no processamento de dados e melhora a escalabilidade das consultas analíticas do core de IA.
+# 📝 Release Notes - v26.10.007
 
 ## 🔧 Chore
-* **Atualização de Infraestrutura (Docker):** Atualização do nome da imagem Docker no arquivo de configuração (`docker_name.txt`), garantindo o alinhamento com os novos padrões de nomenclatura do registro de imagens do projeto.
+- **CI/CD Pipeline:** Adicionado o gatilho `workflow_dispatch` ao pipeline de build no GitHub Actions. 
+    - *Impacto:* Agora é possível disparar manualmente o processo de build através da interface do GitHub, proporcionando maior flexibilidade para validações pontuais e deploys fora do fluxo automatizado de push/PR.
 
 ---
-**Build Info:**
-- **Commit:** `5befc66`
+**Detalhes técnicos:**
+- **Commit:** `be315ab`
+- **Arquivo alterado:** `.github/workflows/build.yml`
 - **Autor:** Carlos Eduardo Duarte Schwalm (krlsedu)
-- **Data:** 2026
