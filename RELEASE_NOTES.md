@@ -1,15 +1,15 @@
-Aqui estão as Notas de Lançamento para a versão **v26.10.004**, focadas em melhorias de infraestrutura de código e atualização de dependências.
+Aqui estão as Notas de Lançamento para a versão **v26.10.005**, consolidadas com base nos logs de alteração.
 
 ---
 
-# 📦 Release Notes - v26.10.004
+# 📝 Release Notes - v26.10.005
 
 ## 🚀 Features
-- **Refatoração do `IaProcessor`**: Melhoria na inicialização da classe `IaProcessor`, que agora suporta parâmetros opcionais para configurações de conexão. Isso garante maior flexibilidade no setup do serviço e facilita a integração em diferentes ambientes sem a necessidade de definições rígidas de parâmetros.
+- **Refatoração do `IaProcessor`**: Implementada a inicialização do processador de IA utilizando parâmetros opcionais para as configurações de conexão. Isso garante maior flexibilidade e desacoplamento na configuração do serviço.
 
 ## 🔧 Chore
-- **Atualização de Dependências**: Upgrade da biblioteca `csctracker-py-core` para a versão `26.9.3`, garantindo compatibilidade com as últimas correções e funcionalidades do core do ecossistema.
+- **Atualização de Dependências**: Atualizado o pacote `csctracker-py-core` para a versão `26.9.3`.
+- **Pipeline & Versionamento**: Sincronização de arquivos de versão (`version.txt`) e atualização do histórico de `RELEASE_NOTES.md` para refletir o estado atual do build.
 
 ---
-**Tech Lead:** Carlos Eduardo Duarte Schwalm (krlsedu)
-**Commit:** `baa9922`
+*Tech Lead: Carlos Eduardo Duarte Schwalm*
