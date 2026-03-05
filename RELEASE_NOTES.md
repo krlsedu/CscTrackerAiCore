@@ -1,15 +1,17 @@
-Aqui estão as Notas de Lançamento para a versão **v26.10.005**, consolidadas com base nos logs de alteração.
+Aqui estão as Notas de Lançamento para a versão **v26.10.006**, detalhando as alterações técnicas implementadas.
 
 ---
 
-# 📝 Release Notes - v26.10.005
+# 📝 Release Notes - v26.10.006
 
 ## 🚀 Features
-- **Refatoração do `IaProcessor`**: Implementada a inicialização do processador de IA utilizando parâmetros opcionais para as configurações de conexão. Isso garante maior flexibilidade e desacoplamento na configuração do serviço.
+* **Refatoração do Serviço de Telemetria:** Otimização da query SQL no módulo `Telemetry.py` para suportar a formatação dinâmica de agrupamentos. Essa alteração permite maior flexibilidade no processamento de dados e melhora a escalabilidade das consultas analíticas do core de IA.
 
 ## 🔧 Chore
-- **Atualização de Dependências**: Atualizado o pacote `csctracker-py-core` para a versão `26.9.3`.
-- **Pipeline & Versionamento**: Sincronização de arquivos de versão (`version.txt`) e atualização do histórico de `RELEASE_NOTES.md` para refletir o estado atual do build.
+* **Atualização de Infraestrutura (Docker):** Atualização do nome da imagem Docker no arquivo de configuração (`docker_name.txt`), garantindo o alinhamento com os novos padrões de nomenclatura do registro de imagens do projeto.
 
 ---
-*Tech Lead: Carlos Eduardo Duarte Schwalm*
+**Build Info:**
+- **Commit:** `5befc66`
+- **Autor:** Carlos Eduardo Duarte Schwalm (krlsedu)
+- **Data:** 2026
