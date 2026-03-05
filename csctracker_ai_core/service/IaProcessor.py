@@ -46,10 +46,10 @@ class IaProcessor:
 
     def __init__(
         self,
-        host="localhost",
-        port=8123,
-        username="admin",
-        password="admin",
+        host=None,
+        port=None,
+        username=None,
+        password=None,
         google_models_limits=None,
         google_free_keys=None,
         google_paid_keys=None,
