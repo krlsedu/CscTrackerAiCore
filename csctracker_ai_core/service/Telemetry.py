@@ -73,11 +73,15 @@ class Telemetry:
             "hour": "%%H"
         }
 
-        group_format = group_formats.get(group, "%%H")
+        group_format = group_formats.get(group, "group")
+        if group_format == "group":
+            group_format = "'group'"
+        else:
+            group_format = f"formatDateTime(e.timestamp, '{group_format}')"
 
         sql = f"""
 SELECT e.task as task,
-       formatDateTime(e.timestamp, '{group_format}')                      AS data,
+       {group_format}                      AS data,
        max(e.timestamp)                           AS ultimo_evento,
        count()                                    AS total_events,
 
