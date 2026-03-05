@@ -1,28 +1,22 @@
-Aqui estão as Notas de Lançamento para a versão **v26.10.008**, formatadas conforme os padrões de engenharia.
+Aqui estão as Notas de Lançamento (Release Notes) para a versão **v26.10.009**, focadas em melhorias na camada de inteligência e análise de dados.
 
 ---
 
-# 📝 Release Notes - v26.10.008
-
-## Resumo
-Esta versão foca em melhorias na infraestrutura de CI/CD, proporcionando maior flexibilidade para a equipe de desenvolvimento ao gerenciar os ciclos de build.
-
----
+# 📝 Release Notes - v26.10.009
 
 ## 🚀 Features
-*Nenhuma funcionalidade de negócio foi implementada nesta versão.*
+
+### Telemetry & Data Analytics
+* **Expansão de Períodos Temporais:** O motor de processamento de telemetria foi aprimorado para suportar uma gama maior de intervalos customizados. Esta atualização permite análises mais granulares e comparativas, facilitando a extração de insights temporais.
+    * **Novos intervalos suportados:** Última semana, último mês, último ano, semestres e trimestres (quarters).
+    * **Impacto:** Melhora a precisão de relatórios e dashboards que dependem do `csctracker_ai_core` para processar métricas de performance.
 
 ## 🐛 Fixes
-*Nenhuma correção de bug foi aplicada nesta versão.*
+* Nenhuma correção de bug foi incluída nesta versão.
 
-## 🔧 Chore & DevOps
-*   **Pipeline de Build:** Adicionado suporte para gatilho manual (`workflow_dispatch`) no GitHub Actions. Isso permite que a equipe dispare builds sob demanda sem a necessidade de novos commits.
-*   **Versionamento:** Atualização dos arquivos de controle (`version.txt`) e sincronização do histórico de lançamentos.
+## 🔧 Chore
+* Nenhuma alteração de infraestrutura ou manutenção de dependências nesta versão.
 
 ---
-
-### Detalhes Técnicos dos Commits:
-*   `be315ab`: Adição do trigger `workflow_dispatch` em `.github/workflows/build.yml`.
-*   `0c254ec`: Incremento de versão e manutenção de metadados de release.
-
-**Tech Lead:** Carlos Eduardo Duarte Schwalm (krlsedu)
+**Tech Lead:** Carlos Eduardo Duarte Schwalm  
+**Commit de Referência:** `342487a`
