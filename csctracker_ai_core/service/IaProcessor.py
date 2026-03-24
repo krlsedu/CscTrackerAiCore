@@ -10,6 +10,7 @@ import uuid
 
 from google import genai
 from google.genai import types
+from google.genai._interactions.types import thinking_level
 
 from .ApiKeyRotator import APIKeyRotator
 from .ClickHouseDb import ClickHouseDb
@@ -72,6 +73,7 @@ class IaProcessor:
         model_variant: str = None,
         forced_free: bool = False,
         forced_paid: bool = False,
+        thinking_level: str = "high",
     ):
         """
         Analisa utilizando Gemini com suporte a fallback Free -> Paid e Retry Automático.
@@ -131,6 +133,9 @@ class IaProcessor:
                         response_mime_type=(
                             "application/json" if return_json else "text/plain"
                         ),
+                        thinking_config=types.ThinkingConfig(
+                            thinking_level= thinking_level
+                        )
                     ),
                 )
                 _time_spent = datetime.datetime.now() - _before
@@ -138,6 +143,12 @@ class IaProcessor:
 
                 input_tokens = response.usage_metadata.prompt_token_count
                 output_tokens = response.usage_metadata.candidates_token_count
+                reasoning_tokens = response.usage_metadata.thoughts_token_count
+
+                if not reasoning_tokens:
+                    reasoning_tokens = 0
+                output_tokens += reasoning_tokens
+
                 if not output_tokens:
                     logger.warning(f"No output tokens generated: {response.text}")
                     output_tokens = 0
@@ -156,6 +167,7 @@ class IaProcessor:
                         "input": input_tokens,
                         "image": image_tokens,
                         "output": output_tokens,
+                        "reasoning": reasoning_tokens,
                     },
                     prompt_final,
                     response.text,

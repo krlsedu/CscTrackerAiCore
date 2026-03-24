@@ -56,6 +56,17 @@ class ClickHouseDb:
         except Exception as e:
             logging.error(f"Falha ao adicionar coluna time_spent: {e}")
 
+        try:
+            _client = self.get_ch_client()
+            _client.command("""
+            alter table ai_events
+                add column if not exists tokens_reasoning UInt32 DEFAULT 0;
+            """)
+            _client.close()
+        except Exception as e:
+            logging.error(f"Falha ao adicionar coluna time_spent: {e}")
+
+
 
     def log_event_telemetry(self, event_id, tokens, payload, result, model_name, task, time_spent):
         try:
@@ -68,6 +79,7 @@ class ClickHouseDb:
                 tokens.get("input", 0),
                 tokens.get("image", 0),
                 tokens.get("output", 0),
+                tokens.get("reasoning", 0),
                 json.dumps(payload, separators=(",", ":")),
                 result,
                 model_name,
@@ -83,6 +95,7 @@ class ClickHouseDb:
                     "tokens_input",
                     "tokens_image",
                     "tokens_output",
+                    "tokens_reasoning",
                     "payload",
                     "result",
                     "model",
