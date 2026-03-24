@@ -1,22 +1,25 @@
-Aqui estão as Notas de Lançamento para a versão **v26.10.010**, focadas na melhoria da integridade de dados e processamento temporal do motor de IA.
+Aqui estão as Notas de Lançamento para a versão **v26.13.001**, focadas nas melhorias de processamento de IA e observabilidade.
 
 ---
 
-# 📝 Release Notes - v26.10.010
-
-## 🐛 Fixes
-
-*   **Telemetry Service:** Refinamento do motor de processamento de datas (`date parsing`) para garantir maior consistência e precisão analítica.
-    *   **Priorização ISO:** O sistema agora prioriza o formato ISO para evitar ambiguidades em entradas internacionais.
-    *   **Gestão de Time Zones:** Implementado tratamento robusto de fusos horários, mitigando erros de conversão em ambientes distribuídos.
-    *   **Ajuste de Datas Finais:** Correção na lógica de inputs que contêm apenas a data (sem hora), garantindo que o limite final do período seja ajustado corretamente para cobrir o intervalo total do dia.
+# 📝 Release Notes - v26.13.001
 
 ## 🚀 Features
-*   *Nenhuma nova funcionalidade nesta versão.*
+
+### IA & Processamento
+- **Suporte a `thinking_level`:** Implementada a capacidade de configurar o nível de raciocínio (*thinking level*) no `IaProcessor`. Isso permite um controle mais refinado sobre modelos que suportam processamento em etapas ou cadeias de pensamento (Chain of Thought).
+
+### Observabilidade e Telemetria
+- **Rastreamento de Reasoning Tokens:** Adicionada a captura e persistência de *reasoning tokens* (tokens de raciocínio). 
+    - Os dados agora são registrados nos logs de telemetria.
+    - O schema do banco de dados **ClickHouse** foi atualizado para armazenar essas métricas, permitindo auditoria de custos e análise de performance de modelos avançados.
+
+## 🐛 Fixes
+- Nenhuma correção de bug reportada nesta versão.
 
 ## 🔧 Chore
-*   *Nenhuma alteração de infraestrutura ou dependências nesta versão.*
+- Atualização de infraestrutura de dados no `ClickHouseDb.py` para suporte aos novos campos de telemetria.
 
 ---
-**Tech Lead Note:** 
-Esta atualização é crítica para a confiabilidade dos relatórios de telemetria. A normalização do parsing de datas no `csctracker_ai_core` previne discrepâncias em filtros temporais e garante que a agregação de dados reflita com precisão o comportamento do sistema em diferentes regiões.
+**Tech Lead:** Carlos Eduardo Duarte Schwalm  
+**Commit de referência:** `84b99b8`
