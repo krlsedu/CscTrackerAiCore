@@ -103,6 +103,9 @@ class IaProcessor:
             if tier == "free":
                 service_tier = "standard"
 
+            if service_tier.lower() not in ("flex", "standard"):
+                service_tier = "standard"
+
             if not key:
                 logger.warning("Nenhum slot disponível no momento. Aguardando...")
                 time.sleep(1)
@@ -179,7 +182,7 @@ class IaProcessor:
                     f"{model_name}-{tier}",
                     task,
                     _time_spent,
-                    service_tier
+                    service_tier.lower(),
                 )
 
                 rotator.liberar_slot_model(key, model_name)
