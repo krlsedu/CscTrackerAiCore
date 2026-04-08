@@ -67,8 +67,19 @@ class ClickHouseDb:
             logging.error(f"Falha ao adicionar coluna time_spent: {e}")
 
 
+        try:
+            _client = self.get_ch_client()
+            _client.command("""
+            alter table ai_events
+                add column if not exists service_tier String CODEC(ZSTD(9)) default 'standard';
+            """)
+            _client.close()
+        except Exception as e:
+            logging.error(f"Falha ao adicionar coluna time_spent: {e}")
 
-    def log_event_telemetry(self, event_id, tokens, payload, result, model_name, task, time_spent):
+    def log_event_telemetry(
+        self, event_id, tokens, payload, result, model_name, task, time_spent, service_tier
+    ):
         try:
             _client = self.get_ch_client()
             if not payload:
@@ -84,7 +95,8 @@ class ClickHouseDb:
                 result,
                 model_name,
                 task,
-                time_spent
+                time_spent,
+                service_tier,
             ]
             _client.insert(
                 "ai_events",
@@ -100,7 +112,8 @@ class ClickHouseDb:
                     "result",
                     "model",
                     "task",
-                    "time_spent"
+                    "time_spent",
+                    "service_tier"
                 ],
             )
             _client.close()

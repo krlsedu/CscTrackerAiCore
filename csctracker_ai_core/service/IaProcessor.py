@@ -74,6 +74,7 @@ class IaProcessor:
         forced_free: bool = False,
         forced_paid: bool = False,
         thinking_level: str = "high",
+        service_tier: str = "standard",
     ):
         """
         Analisa utilizando Gemini com suporte a fallback Free -> Paid e Retry Automático.
@@ -98,6 +99,9 @@ class IaProcessor:
                 forced_free=forced_free,
                 forced_paid=forced_paid,
             )
+
+            if tier == "free":
+                service_tier = "standard"
 
             if not key:
                 logger.warning("Nenhum slot disponível no momento. Aguardando...")
@@ -134,8 +138,9 @@ class IaProcessor:
                             "application/json" if return_json else "text/plain"
                         ),
                         thinking_config=types.ThinkingConfig(
-                            thinking_level= thinking_level
-                        )
+                            thinking_level=thinking_level
+                        ),
+                        service_tier=service_tier,
                     ),
                 )
                 _time_spent = datetime.datetime.now() - _before
@@ -174,6 +179,7 @@ class IaProcessor:
                     f"{model_name}-{tier}",
                     task,
                     _time_spent,
+                    service_tier
                 )
 
                 rotator.liberar_slot_model(key, model_name)

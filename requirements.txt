@@ -2,5 +2,5 @@ csctracker-py-core==26.9.3
 
 clickhouse_connect==0.11.0
 
-google-genai==1.63.0
+google-genai==1.70.0
 protobuf==6.33.5
