@@ -1,37 +1,32 @@
-Aqui está o Release Notes técnico para a versão **v26.15.002**, focado em clareza para a equipe de engenharia e stakeholders.
+Aqui está o Release Notes técnico para a versão **v26.15.003**, estruturado conforme solicitado:
 
 ---
 
-# 📝 Release Notes - v26.15.002
+# 📦 Release Notes - v26.15.003
 
-## Resumo
-Esta versão foca na integridade dos dados de processamento de IA e no refinamento do motor de cálculo de custos de telemetria, garantindo que descontos de camadas de serviço específicas sejam aplicados corretamente.
-
----
-
-## 🚀 Features
-
-### Refinamento de Cálculo de Custos (Telemetry)
-*   **Ajuste de Telemetria:** Atualizada a lógica de cálculo no módulo `Telemetry` para suportar e aplicar descontos nativos da camada de serviço `flex`. Isso garante uma bilhetagem mais precisa para o consumo de recursos de IA.
+## 📝 Resumo
+Esta versão foca na estabilidade da camada de persistência, corrigindo uma regressão crítica no esquema de banco de dados ClickHouse que impedia a atualização correta da estrutura de serviços.
 
 ---
 
 ## 🐛 Fixes
 
-### Validação de Service Tier (IaProcessor)
-*   **Integridade de Dados:** Implementada a obrigatoriedade de atribuições válidas de `service_tier` dentro do `IaProcessor`. Esta alteração evita que processamentos com tiers inválidos ou nulos causem inconsistências nos fluxos de processamento de IA.
+- **Database Schema:** Corrigido erro de sintaxe no script de atualização do `ClickHouseDb`. O ajuste foi aplicado especificamente na definição da coluna `service_tier`, garantindo a integridade do esquema durante a migração ou inicialização do banco.
+    - *Arquivo afetado:* `csctracker_ai_core/service/ClickHouseDb.py`
+
+---
+
+## 🚀 Features
+*Nenhuma nova funcionalidade foi introduzida nesta versão.*
 
 ---
 
 ## 🔧 Chore
-
-*   **Refatoração de Código:** Pequenos ajustes de tipagem e validação nos arquivos `IaProcessor.py` e `Telemetry.py` para melhor manutenibilidade.
+*Nenhuma alteração de infraestrutura, dependências ou refatoração foi realizada nesta versão.*
 
 ---
 
-### 📊 Estatísticas do Commit
-- **Arquivos alterados:** 2
-- **Inserções:** 6
-- **Deleções:** 3
-- **SHA:** `8fc7ea1`
+**Informações de Build:**
+- **Commit:** `d8c0e9a`
 - **Autor:** Carlos Eduardo Duarte Schwalm (krlsedu)
+- **Data:** 2026
