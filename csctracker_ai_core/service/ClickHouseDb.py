@@ -71,7 +71,7 @@ class ClickHouseDb:
             _client = self.get_ch_client()
             _client.command("""
             alter table ai_events
-                add column if not exists service_tier String CODEC(ZSTD(9)) default 'standard';
+                add column if not exists service_tier String default 'standard' CODEC(ZSTD(9);
             """)
             _client.close()
         except Exception as e:
