@@ -1,32 +1,24 @@
-Aqui está o Release Notes técnico para a versão **v26.15.003**, estruturado conforme solicitado:
+Aqui está o Release Notes técnico para a versão **v26.15.004**, estruturado conforme as boas práticas de engenharia.
 
 ---
 
-# 📦 Release Notes - v26.15.003
+# 📦 Release Notes - v26.15.004
 
 ## 📝 Resumo
-Esta versão foca na estabilidade da camada de persistência, corrigindo uma regressão crítica no esquema de banco de dados ClickHouse que impedia a atualização correta da estrutura de serviços.
+Esta versão foca na manutenção preventiva e refinamento da camada de persistência de dados (ClickHouse), corrigindo inconsistências nos logs de erro durante operações de migração de esquema.
 
 ---
 
 ## 🐛 Fixes
-
-- **Database Schema:** Corrigido erro de sintaxe no script de atualização do `ClickHouseDb`. O ajuste foi aplicado especificamente na definição da coluna `service_tier`, garantindo a integridade do esquema durante a migração ou inicialização do banco.
-    - *Arquivo afetado:* `csctracker_ai_core/service/ClickHouseDb.py`
-
----
-
-## 🚀 Features
-*Nenhuma nova funcionalidade foi introduzida nesta versão.*
-
----
+*   **ClickHouseDb Service:** Correção de erro de digitação (*typo*) nas mensagens de log disparadas durante a adição da coluna `service_tier`. Essa correção melhora a rastreabilidade e a análise de logs em ambientes de produção.
 
 ## 🔧 Chore
-*Nenhuma alteração de infraestrutura, dependências ou refatoração foi realizada nesta versão.*
+*   **Refatoração de Código:** Limpeza técnica no arquivo `csctracker_ai_core/service/ClickHouseDb.py` para garantir conformidade com os padrões de escrita do projeto.
 
 ---
 
-**Informações de Build:**
-- **Commit:** `d8c0e9a`
-- **Autor:** Carlos Eduardo Duarte Schwalm (krlsedu)
-- **Data:** 2026
+### 🛠 Detalhes Técnicos
+*   **Commit:** `81302db`
+*   **Impacto:** Baixo (Apenas logs).
+*   **Arquivos alterados:** 1 arquivo (`ClickHouseDb.py`).
+*   **Autor:** Carlos Eduardo Duarte Schwalm (krlsedu)
