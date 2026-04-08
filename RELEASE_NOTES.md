@@ -1,43 +1,37 @@
-Aqui está o Release Notes técnico para a versão **v26.15.001**, estruturado com foco em clareza para a equipe de engenharia e stakeholders.
+Aqui está o Release Notes técnico para a versão **v26.15.002**, focado em clareza para a equipe de engenharia e stakeholders.
 
 ---
 
-# 📝 Release Notes - v26.15.001
-**Data:** 2026  
-**Responsável:** Tech Lead  
-**Commit:** `d5e1ab0`
+# 📝 Release Notes - v26.15.002
+
+## Resumo
+Esta versão foca na integridade dos dados de processamento de IA e no refinamento do motor de cálculo de custos de telemetria, garantindo que descontos de camadas de serviço específicas sejam aplicados corretamente.
 
 ---
 
 ## 🚀 Features
 
-### Suporte a Service Tiers no Processamento de IA
-Implementada a segmentação por níveis de serviço (`service_tier`) no componente central de processamento.
-- **IaProcessor:** Adicionado suporte nativo para identificar e tratar diferentes camadas de serviço durante a execução.
-- **Database Schema:** Atualização do esquema do banco de dados para persistência e suporte aos novos atributos de tiering.
-
-### Telemetria Avançada
-Refatoração significativa no módulo de telemetria para suportar observabilidade granular por nível de serviço.
-- **Telemetry.py:** Implementação de logs detalhados que agora incluem o `service_tier`, permitindo análises de custo e performance por categoria de usuário/serviço.
-- **ClickHouseDb:** Otimização das queries e estrutura de inserção para suportar os novos campos de telemetria de forma performática.
+### Refinamento de Cálculo de Custos (Telemetry)
+*   **Ajuste de Telemetria:** Atualizada a lógica de cálculo no módulo `Telemetry` para suportar e aplicar descontos nativos da camada de serviço `flex`. Isso garante uma bilhetagem mais precisa para o consumo de recursos de IA.
 
 ---
 
 ## 🐛 Fixes
-*Nenhuma correção de bug reportada nesta versão.*
+
+### Validação de Service Tier (IaProcessor)
+*   **Integridade de Dados:** Implementada a obrigatoriedade de atribuições válidas de `service_tier` dentro do `IaProcessor`. Esta alteração evita que processamentos com tiers inválidos ou nulos causem inconsistências nos fluxos de processamento de IA.
 
 ---
 
 ## 🔧 Chore
 
-### Atualização de Dependências
-- **Google GenAI:** Upgrade da biblioteca `google-genai` no `requirements.txt` para garantir compatibilidade com as últimas APIs e melhorias de estabilidade nos modelos generativos.
+*   **Refatoração de Código:** Pequenos ajustes de tipagem e validação nos arquivos `IaProcessor.py` e `Telemetry.py` para melhor manutenibilidade.
 
 ---
 
-### 📊 Resumo de Alterações
-- **Arquivos modificados:** 4
-- **Inserções:** 119
-- **Deleções:** 34
-
-> **Nota Técnica:** Esta versão foca na fundação para monetização e controle de cotas, permitindo que o sistema diferencie o processamento baseado no tier do serviço contratado. A atualização do ClickHouse é crítica para manter a integridade dos dados analíticos.
+### 📊 Estatísticas do Commit
+- **Arquivos alterados:** 2
+- **Inserções:** 6
+- **Deleções:** 3
+- **SHA:** `8fc7ea1`
+- **Autor:** Carlos Eduardo Duarte Schwalm (krlsedu)
