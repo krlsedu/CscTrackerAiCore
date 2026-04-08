@@ -264,7 +264,8 @@ SELECT e.task as task,
                         (e.tokens_output / 1000000) * p.output_price_less_200,
                         (e.tokens_input / 1000000) * p.input_price_more_200 +
                         (e.tokens_output / 1000000) * p.output_price_more_200)
-             ) * if (e.service_tier = 'flex', 0.5, 1), 4)                                AS custo_total_usd,
+                        * if (e.service_tier = 'flex', 0.5, 1)
+             ), 4)                                AS custo_total_usd,
        round(avgIf(time_spent, time_spent != 0),3)         as tempo_medio_por_evento,
        round(maxIf(time_spent, time_spent > 0),3)         as tempo_maximo_por_evento,
        round(minIf(time_spent, time_spent > 0),3)         as tempo_minimo_por_evento
