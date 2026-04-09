@@ -1,26 +1,25 @@
-Aqui está o Release Notes técnico para a versão **v26.15.005**, focado em clareza e impacto técnico.
+Aqui está o Release Notes técnico para a versão **v26.15.006**, focado em clareza e impacto técnico.
 
 ---
 
-# 📦 Release Notes - v26.15.005
+# 📦 Release Notes - v26.15.006
 
 ## Resumo
-Esta versão foca no refinamento da camada de telemetria do core de IA, trazendo maior precisão e legibilidade ao cálculo de custos para tiers de serviço específicos.
+Esta versão foca na refatoração e simplificação da lógica de atribuição de camadas de serviço (`service_tier`) dentro do processador de IA, eliminando redundâncias de código legado.
 
 ---
-
-## 🐛 Fixes
-*   **Telemetry Service:** Ajustada a lógica de cálculo de custos no módulo de telemetria. A alteração visa eliminar ambiguidades no processamento de métricas para o tier de serviço `flex`, garantindo que o faturamento ou reporte de consumo reflita corretamente as regras de negócio da camada.
 
 ## 🔧 Chore
-*   **Refatoração de Código:** Melhoria na legibilidade e manutenção do arquivo `Telemetry.py` dentro do `csctracker_ai_core`.
+- **Refatoração do `IaProcessor`**: Remoção de lógica redundante para tratamento do tier `free`. A atribuição de `service_tier` foi simplificada para garantir um fluxo de dados mais direto e menos propenso a erros de estado.
+    - *Arquivo afetado:* `csctracker_ai_core/service/IaProcessor.py`
 
 ---
 
-### 🛠 Detalhes Técnicos (Diff Summary)
-- **Arquivo modificado:** `csctracker_ai_core/service/Telemetry.py`
-- **Impacto:** 2 inserções e 1 deleção.
-- **Commit ID:** `8e0765a`
+## 🛠 Detalhes Técnicos (Internal)
+- **Commit:** `ea7bb34`
+- **Impacto:** Baixo. A alteração limpa o código técnico sem alterar a regra de negócio final, otimizando a manutenção do componente core de IA.
+- **Remoções:** 3 linhas de código redundante.
 
 ---
-*Documentação gerada automaticamente com base no histórico de commits.*
+**Tech Lead:** Carlos Eduardo Duarte Schwalm (krlsedu)
+**Data:** 2026
