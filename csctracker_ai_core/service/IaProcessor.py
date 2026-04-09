@@ -100,9 +100,6 @@ class IaProcessor:
                 forced_paid=forced_paid,
             )
 
-            if tier == "free":
-                service_tier = "standard"
-
             if service_tier.lower() not in ("flex", "standard"):
                 service_tier = "standard"
 
