@@ -197,12 +197,27 @@ class APIKeyRotator:
     def select_and_reserve_best_slot(
         self,
         model_variant: str = None,
+        variant_family: str = None,
         forced_paid: bool = False,
         forced_free: bool = False,
+        exact_match: bool = False,
     ):
         """
         Busca slot livre: 1º em Free Keys (RR), 2º em Paid Keys (RR).
         Retorna: (key, model) ou (None, None) se tudo estiver ocupado.
+
+        Parâmetros:
+        - model_variant: quando informado, filtra o modelo a ser alocado.
+          Por padrão usa correspondência por "contains" (substring).
+        - variant_family: atalho sem versão. Aceita "pro", "flash", "lite"/"flash-lite".
+          Regras:
+            * pro  -> modelos que contenham "pro"
+            * lite -> modelos que contenham "flash-lite" (ou "lite")
+            * flash-> modelos que contenham "flash" mas NÃO "lite"
+          Quando informado, tem precedência sobre model_variant.
+        - exact_match: se True, exige correspondência exata do nome do modelo
+          (case-insensitive). Útil para restringir, por ex., somente
+          "...flash-lite" sem pegar variantes que também contém "flash".
         """
         with self._lock:
             current_time = time.time()
@@ -210,7 +225,7 @@ class APIKeyRotator:
             # TIER 1: Tenta Free Keys
             if not forced_paid:
                 key, model = self._find_slot_in_list(
-                    self._free_keys, self._free_index, current_time, model_variant
+                    self._free_keys, self._free_index, current_time, model_variant, variant_family, exact_match
                 )
                 if key:
                     self._free_index = (self._free_index + 1) % len(self._free_keys)
@@ -219,7 +234,7 @@ class APIKeyRotator:
             # TIER 2: Tenta Paid Keys (Fallback)
             if not forced_free:
                 key, model = self._find_slot_in_list(
-                    self._paid_keys, self._paid_index, current_time, model_variant
+                    self._paid_keys, self._paid_index, current_time, model_variant, variant_family, exact_match
                 )
                 if key:
                     self._paid_index = (self._paid_index + 1) % len(self._paid_keys)
@@ -228,7 +243,7 @@ class APIKeyRotator:
             return None, None, None
 
     def _find_slot_in_list(
-        self, keys_list, start_index, current_time, model_variant: str = None
+        self, keys_list, start_index, current_time, model_variant: str = None, variant_family: str = None, exact_match: bool = False
     ):
         """Helper para iterar numa lista circularmente (Round-Robin)."""
         count = len(keys_list)
@@ -242,8 +257,30 @@ class APIKeyRotator:
             # Itera sobre os modelos dessa chave (já ordenados por prioridade/custo)
             for model in self._models_by_key[key]:
                 # 0. Filtra por variante se informado
-                if model_variant and model_variant.lower() not in model.lower():
-                    continue
+                model_l = model.lower()
+                if variant_family:
+                    vf = variant_family.lower().strip()
+                    if vf in ("lite", "flash-lite"):
+                        if ("flash-lite" not in model_l) and ("lite" not in model_l):
+                            continue
+                    elif vf == "pro":
+                        if "pro" not in model_l:
+                            continue
+                    elif vf == "flash":
+                        if ("flash" not in model_l) or ("lite" in model_l):
+                            continue
+                    else:
+                        # fallback: usar como substring simples
+                        if vf not in model_l:
+                            continue
+                elif model_variant:
+                    variant_l = model_variant.lower()
+                    if exact_match:
+                        if model_l != variant_l:
+                            continue
+                    else:
+                        if variant_l not in model_l:
+                            continue
 
                 # 1. Verifica Suspensão
                 if model in self._suspended_until[key]:
