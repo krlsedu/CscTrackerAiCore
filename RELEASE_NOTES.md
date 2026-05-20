@@ -1,25 +1,33 @@
-Aqui está o Release Notes técnico para a versão **v26.15.006**, focado em clareza e impacto técnico.
+Aqui está o Release Notes técnico estruturado para a versão **v26.21.001**, focado em clareza para a equipe de engenharia e stakeholders.
 
 ---
 
-# 📦 Release Notes - v26.15.006
+# 📦 Release Notes - v26.21.001
 
-## Resumo
-Esta versão foca na refatoração e simplificação da lógica de atribuição de camadas de serviço (`service_tier`) dentro do processador de IA, eliminando redundâncias de código legado.
+## 📝 Sumário
+Esta versão foca no refinamento da lógica de seleção e rotação de chaves de API no core de IA, permitindo um controle mais granular sobre as variantes de modelos e famílias de provedores.
+
+---
+
+## 🚀 Features
+
+### Refinamento no `ApiKeyRotator`
+Implementada a capacidade de filtragem avançada durante a seleção de slots de chaves de API. 
+- **Parâmetro `variant_family`**: Agora é possível agrupar e selecionar chaves baseadas na família da variante do modelo, facilitando a gestão de modelos multimodais ou de diferentes capacidades dentro do mesmo provedor.
+- **Parâmetro `exact_match`**: Adicionado suporte para busca exata, garantindo que o seletor de chaves retorne apenas credenciais que correspondam rigorosamente aos critérios definidos, evitando fallbacks indesejados em ambientes de produção.
 
 ---
 
 ## 🔧 Chore
-- **Refatoração do `IaProcessor`**: Remoção de lógica redundante para tratamento do tier `free`. A atribuição de `service_tier` foi simplificada para garantir um fluxo de dados mais direto e menos propenso a erros de estado.
-    - *Arquivo afetado:* `csctracker_ai_core/service/IaProcessor.py`
+
+- **Refatoração Interna**: Otimização do serviço `ApiKeyRotator.py` com a adição de 42 novas linhas de lógica de validação e filtragem, melhorando a robustez do sistema de rotação.
 
 ---
 
-## 🛠 Detalhes Técnicos (Internal)
-- **Commit:** `ea7bb34`
-- **Impacto:** Baixo. A alteração limpa o código técnico sem alterar a regra de negócio final, otimizando a manutenção do componente core de IA.
-- **Remoções:** 3 linhas de código redundante.
+## 🛠 Detalhes Técnicos
+- **Arquivos Alterados:** `csctracker_ai_core/service/ApiKeyRotator.py`
+- **ID do Commit:** `e5d130f`
+- **Autor:** Carlos Eduardo Duarte Schwalm
 
 ---
-**Tech Lead:** Carlos Eduardo Duarte Schwalm (krlsedu)
-**Data:** 2026
+*Gerado automaticamente pelo Tech Lead Bot.*
