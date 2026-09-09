@@ -1,4 +1,4 @@
-csctracker-py-core==26.9.3
+csctracker-py-core==26.37.4
 
 clickhouse_connect==0.11.0
 
