@@ -27,6 +27,17 @@ class APIKeyRotator:
     :ivar google_paid_keys: Comma-separated paid API keys, optional.
     """
 
+    CANONICAL_TIERS = ("lite", "flash", "pro", "ultra")
+
+    TIER_ALIASES = {
+        "lite": "lite",
+        "flash-lite": "lite",
+        "flash_lite": "lite",
+        "flash": "flash",
+        "pro": "pro",
+        "ultra": "ultra",
+    }
+
     def __init__(
         self,
         logger: logging.Logger,
@@ -46,6 +57,7 @@ class APIKeyRotator:
 
         self._models = []
         self._model_limits = {}
+        self._model_tiers = {}  # {model_name: canonical_tier}
 
         # Controle de estado
         self._active_slots = {}  # {key: {model: count}}
@@ -72,12 +84,50 @@ class APIKeyRotator:
         # 2. Carregar Chaves (Separando Free e Paga)
         self.load_keys()
 
+    @classmethod
+    def _infer_model_tier(cls, model_name: str) -> str:
+        """
+        Infere o tier canônico ('lite', 'flash', 'pro', 'ultra') pelo nome do modelo,
+        incluindo a nomenclatura de elementos químicos da família Gemini 4:
+        - carbon   -> ultra (Frontier #1 / Google AI Ultra)
+        - argon    -> pro   (Frontier Reasoning / Google AI Pro)
+        - hydrogen -> flash (Fast Agentic / Next-Gen Flash)
+        - helium / flash-lite / lite -> lite
+        """
+        m = (model_name or "").lower()
+        if "ultra" in m or "carbon" in m:
+            return "ultra"
+        if "pro" in m or "argon" in m:
+            return "pro"
+        if "flash-lite" in m or "lite" in m or "helium" in m:
+            return "lite"
+        if "flash" in m or "hydrogen" in m:
+            return "flash"
+        return "flash"
+
+    def _parse_model_key_and_tier(self, raw_key: str):
+        """
+        Extrai o nome limpo do modelo e o tier opcional caso configurado como 'modelo:tier'.
+        Ex: 'gemini-4-carbon:ultra' -> ('gemini-4-carbon', 'ultra')
+            'gemini-4-argon'        -> ('gemini-4-argon', 'pro')
+        """
+        cleaned = raw_key.strip()
+        explicit_tier = None
+        if ":" in cleaned:
+            parts = cleaned.rsplit(":", 1)
+            candidate_tier = parts[1].strip().lower()
+            if candidate_tier in self.TIER_ALIASES:
+                cleaned = parts[0].strip()
+                explicit_tier = self.TIER_ALIASES[candidate_tier]
+        tier = explicit_tier or self._infer_model_tier(cleaned)
+        return cleaned, tier
+
     def _load_model_config(self):
         """
         Lê a ENV 'GOOGLE_MODEL_LIMITS'.
-        Suporta dois formatos:
-        1. JSON: '{"model": 1}'
-        2. Simples (Portainer Friendly): 'model=1,model2=10'
+        Suporta dois formatos (com tag opcional ':tier' por modelo):
+        1. JSON: '{"model": 1}' ou '{"gemini-4-carbon:ultra": 2}'
+        2. Simples (Portainer Friendly): 'model=1,model2=10' ou 'gemini-4-argon:pro=2,gemini-4-hydrogen:flash=5'
         """
         default_limits = {
             "gemini-3-flash-preview": 1,
@@ -85,64 +135,81 @@ class APIKeyRotator:
         }
         env_config = self.google_models_limits or os.getenv("GOOGLE_MODEL_LIMITS")
 
-        self._model_limits = {}
+        raw_limits = {}
 
         if env_config:
             env_config = env_config.strip()
             # Tenta decodificar formato JSON (antigo)
             if env_config.startswith("{"):
                 try:
-                    self._model_limits = json.loads(env_config)
+                    raw_limits = json.loads(env_config)
                     self.logger.info(
-                        f"Configuração (JSON) carregada: {self._model_limits}"
+                        f"Configuração (JSON) carregada: {raw_limits}"
                     )
                 except json.JSONDecodeError:
                     self.logger.error("JSON inválido. Usando padrões.")
-                    self._model_limits = default_limits
+                    raw_limits = default_limits
             # Tenta decodificar formato Simples (Novo - Portainer Safe)
             else:
                 try:
-                    # Ex: "gemini-3-pro=4,gemini-2.5-pro=10"
+                    # Ex: "gemini-4-carbon:ultra=2,gemini-4-argon:pro=4,gemini-4-hydrogen:flash=10"
                     items = env_config.split(",")
                     for item in items:
                         if "=" in item:
-                            key, value = item.split("=")
-                            self._model_limits[key.strip()] = int(value.strip())
+                            key, value = item.split("=", 1)
+                            raw_limits[key.strip()] = int(value.strip())
                     self.logger.info(
-                        f"Configuração (Simple) carregada: {self._model_limits}"
+                        f"Configuração (Simple) carregada: {raw_limits}"
                     )
                 except Exception as e:
                     self.logger.error(
                         f"Erro ao ler config simples: {e}. Usando padrões."
                     )
-                    self._model_limits = default_limits
+                    raw_limits = default_limits
 
         # Se falhou ou veio vazio, usa default
-        if not self._model_limits:
-            self._model_limits = default_limits
+        if not raw_limits:
+            raw_limits = default_limits
+
+        self._model_limits = {}
+        self._model_tiers = {}
+        for raw_key, limit_val in raw_limits.items():
+            model_name, tier = self._parse_model_key_and_tier(raw_key)
+            self._model_limits[model_name] = int(limit_val)
+            self._model_tiers[model_name] = tier
 
         self._models = list(self._model_limits.keys())
 
+    def _get_model_weight(self, model_name: str) -> int:
+        """
+        Retorna o peso de custo/capacidade do modelo para ordenação:
+        lite (5) < flash (10) < hydrogen (15) < pro (80) < argon (85) < ultra (100) < carbon (105).
+        Respeita override explícito de tier em GOOGLE_MODEL_LIMITS.
+        """
+        m = model_name.lower()
+        tier = self._model_tiers.get(model_name) or self._infer_model_tier(model_name)
+
+        if tier == "ultra":
+            return 105 if "carbon" in m else 100
+        if tier == "pro":
+            if "carbon" in m:
+                return 90
+            return 85 if "argon" in m else 80
+        if tier == "lite":
+            return 5
+        if tier == "flash":
+            return 15 if "hydrogen" in m else 10
+        return 50
+
     def _get_prioritized_models(self, is_paid_key: bool):
         """Define a ordem dos modelos para economizar dinheiro."""
-
-        def get_model_weight(model_name):
-            m = model_name.lower()
-            if "ultra" in m:
-                return 100
-            if "pro" in m:
-                return 80
-            if "flash" in m:
-                return 10
-            return 50
-
         models_copy = self._models.copy()
         if is_paid_key:
-            # PAGA: Prioriza o MAIS BARATO (Flash -> Pro)
-            return sorted(models_copy, key=get_model_weight, reverse=False)
+            # PAGA: Prioriza o MAIS BARATO (Lite -> Flash/Hydrogen -> Pro/Argon -> Ultra/Carbon)
+            return sorted(models_copy, key=self._get_model_weight, reverse=False)
         else:
-            # FREE: Prioriza o MELHOR (Pro -> Flash) - "Gastar o caro de graça"
-            return sorted(models_copy, key=get_model_weight, reverse=True)
+            # FREE: Prioriza o MELHOR (Ultra/Carbon -> Pro/Argon -> Flash/Hydrogen -> Lite) - "Gastar o caro de graça"
+            return sorted(models_copy, key=self._get_model_weight, reverse=True)
 
     def load_keys(self):
         """Carrega chaves separando em listas Free e Paid."""
@@ -194,6 +261,49 @@ class APIKeyRotator:
 
     # --- LÓGICA DE SELEÇÃO DE SLOT (CASCATA + ROUND ROBIN) ---
 
+    def _resolve_requested_tier(self, model_variant: str = None, variant_family: str = None):
+        """
+        Se variant_family ou model_variant for um alias de tier ('lite', 'flash-lite',
+        'flash', 'pro', 'ultra'), retorna o tier canônico correspondente.
+        Caso contrário, retorna None (para busca por nome/substring específico, ex: 'argon', 'carbon').
+        """
+        raw = (variant_family or model_variant or "").strip().lower()
+        if not raw:
+            return None
+        return self.TIER_ALIASES.get(raw)
+
+    def _matches_model_filter(
+        self,
+        model: str,
+        model_variant: str = None,
+        variant_family: str = None,
+        exact_match: bool = False,
+    ) -> bool:
+        """
+        Verifica se 'model' atende ao filtro solicitado por tier canônico ou por substring/exact_match.
+        """
+        model_l = model.lower()
+        model_tier = self._model_tiers.get(model) or self._infer_model_tier(model)
+
+        if not exact_match:
+            requested_tier = self._resolve_requested_tier(model_variant, variant_family)
+            if requested_tier:
+                if model_tier == requested_tier:
+                    return True
+                # Se pediu 'pro' e não há nenhum modelo 'pro' configurado na lista,
+                # permite fallback transparente para 'ultra' (ex: carbon).
+                if requested_tier == "pro" and "pro" not in self._model_tiers.values():
+                    return model_tier == "ultra"
+                return False
+
+        target = (variant_family or model_variant or "").strip().lower()
+        if not target:
+            return True
+
+        if exact_match:
+            return model_l == target
+        return target in model_l
+
     def select_and_reserve_best_slot(
         self,
         model_variant: str = None,
@@ -208,12 +318,14 @@ class APIKeyRotator:
 
         Parâmetros:
         - model_variant: quando informado, filtra o modelo a ser alocado.
-          Por padrão usa correspondência por "contains" (substring).
-        - variant_family: atalho sem versão. Aceita "pro", "flash", "lite"/"flash-lite".
+          Aceita tanto tiers canônicos ("lite", "flash-lite", "flash", "pro", "ultra")
+          quanto nomes/substrings de modelos ("carbon", "argon", "hydrogen", "gemini-4-argon").
+        - variant_family: atalho sem versão. Aceita "ultra", "pro", "flash", "lite"/"flash-lite".
           Regras:
-            * pro  -> modelos que contenham "pro"
-            * lite -> modelos que contenham "flash-lite" (ou "lite")
-            * flash-> modelos que contenham "flash" mas NÃO "lite"
+            * ultra -> modelos de tier ultra ("ultra", "carbon" ou tag ':ultra')
+            * pro   -> modelos de tier pro ("pro", "argon" ou tag ':pro')
+            * lite  -> modelos de tier lite ("flash-lite", "lite", "helium" ou tag ':lite')
+            * flash -> modelos de tier flash ("flash" exceto lite, "hydrogen" ou tag ':flash')
           Quando informado, tem precedência sobre model_variant.
         - exact_match: se True, exige correspondência exata do nome do modelo
           (case-insensitive). Útil para restringir, por ex., somente
@@ -256,31 +368,11 @@ class APIKeyRotator:
 
             # Itera sobre os modelos dessa chave (já ordenados por prioridade/custo)
             for model in self._models_by_key[key]:
-                # 0. Filtra por variante se informado
-                model_l = model.lower()
-                if variant_family:
-                    vf = variant_family.lower().strip()
-                    if vf in ("lite", "flash-lite"):
-                        if ("flash-lite" not in model_l) and ("lite" not in model_l):
-                            continue
-                    elif vf == "pro":
-                        if "pro" not in model_l:
-                            continue
-                    elif vf == "flash":
-                        if ("flash" not in model_l) or ("lite" in model_l):
-                            continue
-                    else:
-                        # fallback: usar como substring simples
-                        if vf not in model_l:
-                            continue
-                elif model_variant:
-                    variant_l = model_variant.lower()
-                    if exact_match:
-                        if model_l != variant_l:
-                            continue
-                    else:
-                        if variant_l not in model_l:
-                            continue
+                # 0. Filtra por variante/tier se informado
+                if not self._matches_model_filter(
+                    model, model_variant=model_variant, variant_family=variant_family, exact_match=exact_match
+                ):
+                    continue
 
                 # 1. Verifica Suspensão
                 if model in self._suspended_until[key]:
