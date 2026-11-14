@@ -271,16 +271,16 @@ SELECT e.task as task,
        round(minIf(time_spent, time_spent > 0),3)         as tempo_minimo_por_evento
 
 FROM (
-         SELECT *, 1 as join_key FROM ai_events
+         SELECT *, replaceRegexpOne(model, '-(free|paid)$', '') as clean_model, 1 as join_key FROM ai_events
          WHERE timestamp >= %(start_date)s AND timestamp <= %(end_date)s
          ) AS e
 
-         LEFT JOIN (
+         ASOF LEFT JOIN (
     SELECT *, replaceRegexpOne(model, '-(free|paid)$', '') as join_model
     FROM model_prices
-    ORDER BY timestamp DESC
-    LIMIT 1 BY model
-    ) AS p ON replaceRegexpOne(e.model, '-(free|paid)$', '') = p.join_model
+    ) AS p
+                   ON e.clean_model = p.join_model
+                       AND e.timestamp >= p.timestamp
     ASOF
          LEFT JOIN (
     SELECT *, 1 as join_key FROM daily_exchange_rates
