@@ -60,7 +60,7 @@ As seguintes variáveis de ambiente são suportadas:
 | `GOOGLE_FREE_KEYS` | Lista de chaves gratuitas (separadas por vírgula) | `key1,key2` |
 | `GOOGLE_PAID_KEYS` | Lista de chaves pagas (separadas por vírgula) | `key_paga1` |
 | `GOOGLE_MODEL_LIMITS` | Limites de concorrência por modelo (aceita tag opcional `:tier`) | `gemini-4-hydrogen:flash=5,gemini-4-argon:pro=2` |
-| `GOOGLE_TIER_FALLBACKS` | Modelo fallback por tier canônico (`lite`, `flash`, `pro`, `ultra`) | `flash=gemini-2.5-flash,pro=gemini-2.5-pro` |
+| `GOOGLE_TIER_FALLBACKS` | Modelo fallback por tier canônico (`lite`, `flash`, `pro`, `ultra`), com `:limite` opcional | `pro=gemini-4-neon:15,flash=gemini-4-hydrogen:50,lite=gemini-3.5-flash-lite:500` |
 | `GOOGLE_TIMEOUT_STANDARD_SECONDS` | Timeout HTTP (em segundos) para chamadas `standard` (default: `300`) | `300` |
 | `GOOGLE_TIMEOUT_FLEX_SECONDS` | Timeout HTTP (em segundos) para chamadas `flex` (default: `600`) | `600` |
 | `GOOGLE_RETRY_BACKOFF_BASE_SECONDS` | Atraso base (s) do backoff exponencial com jitter em erros transitórios (default: `0.5`) | `0.5` |
@@ -73,9 +73,9 @@ As seguintes variáveis de ambiente são suportadas:
 | `CLICKHOUSE_BATCH_SIZE` | Quantidade de eventos por lote de inserção no ClickHouse (default: `20`) | `20` |
 | `CLICKHOUSE_FLUSH_INTERVAL_SECONDS` | Intervalo máximo (s) para flush do lote pendente (default: `5.0`) | `5.0` |
 
-> **Nota sobre `GOOGLE_MODEL_LIMITS`**: Aceita o formato simples `modelo=limite,modelo2=limite2` (com tag opcional `:tier`) ou um JSON `{"modelo": limite}`.
+> **Nota sobre `GOOGLE_MODEL_LIMITS`**: Aceita o formato simples `modelo=limite,modelo2=limite2` (com tag opcional `:tier`) ou um JSON `{"modelo": limite}`. Mantenha aqui apenas os modelos **titulares**.
 >
-> **Nota sobre `GOOGLE_TIER_FALLBACKS`**: Aceita o formato simples `tier=modelo,tier2=modelo2` ou um JSON `{"flash": "gemini-2.5-flash"}`. Se o modelo fallback não estiver listado em `GOOGLE_MODEL_LIMITS`, ele recebe automaticamente o **limite padrão de `20` slots** e só é utilizado quando o fallback do tier estiver ativo. O cooldown de **5 minutos (`300s`)** após 2 erros consecutivos é mantido de forma **independente por `service_tier`** (`flex` não afeta `standard` e vice-versa).
+> **Nota sobre `GOOGLE_TIER_FALLBACKS`**: Aceita o formato simples `tier=modelo[:limite],tier2=modelo2[:limite]` ou um JSON `{"flash": "gemini-4-hydrogen:50"}`. Se `:limite` for omitido e o modelo não estiver em `GOOGLE_MODEL_LIMITS`, ele recebe automaticamente o **limite padrão de `20` slots** e só é utilizado quando o fallback do tier estiver ativo (sem entrar na fila dos titulares). O cooldown de **5 minutos (`300s`)** após 2 erros consecutivos é mantido de forma **independente por `service_tier`** (`flex` não afeta `standard` e vice-versa).
 
 ## Uso Didático
 

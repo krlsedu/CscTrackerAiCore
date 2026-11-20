@@ -151,6 +151,61 @@ class TestAPIKeyRotatorTierFallback(unittest.TestCase):
         self.assertEqual(model2, "gemini-4-hydrogen")
         rotator.liberar_slot_model(key2, model2)
 
+    def test_parse_explicit_limits_in_tier_fallbacks_simple_and_json(self):
+        rotator = APIKeyRotator(
+            self.logger,
+            google_models_limits="gemini-4-argon=15,gemini-3.8-flash=50,gemini-3.1-flash-lite=500",
+            google_paid_keys="paid_key_1",
+            google_tier_fallbacks="pro=gemini-4-neon:15,flash=gemini-4-hydrogen:50,lite=gemini-3.5-flash-lite:500",
+        )
+
+        self.assertEqual(rotator.get_tier_fallback("pro"), "gemini-4-neon")
+        self.assertEqual(rotator.get_tier_fallback("flash"), "gemini-4-hydrogen")
+        self.assertEqual(rotator.get_tier_fallback("lite"), "gemini-3.5-flash-lite")
+        self.assertEqual(rotator._model_limits["gemini-4-neon"], 15)
+        self.assertEqual(rotator._model_limits["gemini-4-hydrogen"], 50)
+        self.assertEqual(rotator._model_limits["gemini-3.5-flash-lite"], 500)
+
+        # Fallbacks não podem entrar na fila de titulares
+        self.assertNotIn("gemini-4-neon", rotator._models)
+        self.assertNotIn("gemini-4-hydrogen", rotator._models)
+        self.assertNotIn("gemini-3.5-flash-lite", rotator._models)
+
+        # Titulares continuam sendo selecionados normalmente fora do fallback
+        k_pro, m_pro, _ = rotator.select_and_reserve_best_slot(model_variant="pro")
+        self.assertEqual(m_pro, "gemini-4-argon")
+        rotator.liberar_slot_model(k_pro, m_pro)
+
+        # Formato JSON misturando limite explícito, sem limite (default 20) e limite inválido (default 20)
+        rotator_json = APIKeyRotator(
+            self.logger,
+            google_models_limits="gemini-4-argon=15,gemini-3.8-flash=50,gemini-3.1-flash-lite=500",
+            google_paid_keys="paid_key_1",
+            google_tier_fallbacks=json.dumps(
+                {
+                    "pro": "gemini-4-neon:2",
+                    "flash": "gemini-4-hydrogen",
+                    "lite": "gemini-3.5-flash-lite:0",
+                }
+            ),
+        )
+        self.assertEqual(rotator_json._model_limits["gemini-4-neon"], 2)
+        self.assertEqual(rotator_json._model_limits["gemini-4-hydrogen"], 20)
+        self.assertEqual(rotator_json._model_limits["gemini-3.5-flash-lite"], 20)
+
+        # Valida que o limite customizado (2) é respeitado na alocação de slots quando fallback está ativo
+        rotator_json.registrar_erro_modelo("gemini-4-argon", "pro")
+        rotator_json.registrar_erro_modelo("gemini-4-argon", "pro")
+        k1, m1, _ = rotator_json.select_and_reserve_best_slot(model_variant="pro")
+        k2, m2, _ = rotator_json.select_and_reserve_best_slot(model_variant="pro")
+        k3, m3, _ = rotator_json.select_and_reserve_best_slot(model_variant="pro")
+        self.assertEqual((m1, m2), ("gemini-4-neon", "gemini-4-neon"))
+        # 3º slot simultâneo no fallback (limite 2) cai no titular disponível em vez de estourar o limite
+        self.assertEqual(m3, "gemini-4-argon")
+        rotator_json.liberar_slot_model(k1, m1)
+        rotator_json.liberar_slot_model(k2, m2)
+        rotator_json.liberar_slot_model(k3, m3)
+
     def test_without_fallbacks_configured_keeps_legacy_behavior(self):
         rotator = APIKeyRotator(
             self.logger,

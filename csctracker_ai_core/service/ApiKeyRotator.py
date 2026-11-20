@@ -199,10 +199,11 @@ class APIKeyRotator:
     def _load_tier_fallbacks(self):
         """
         Lê a ENV 'GOOGLE_TIER_FALLBACKS' (ou parâmetro google_tier_fallbacks).
-        Suporta dois formatos:
-        1. JSON: '{"flash": "gemini-2.5-flash", "pro": "gemini-2.5-pro"}'
-        2. Simples (Portainer Friendly): 'flash=gemini-2.5-flash,pro=gemini-2.5-pro,lite=gemini-2.5-flash-lite'
-        Modelos de fallback que não constam em GOOGLE_MODEL_LIMITS recebem limite padrão 20.
+        Suporta dois formatos (com sufixo opcional ':limite' por modelo):
+        1. JSON: '{"flash": "gemini-4-hydrogen:50", "pro": "gemini-4-neon:15"}'
+        2. Simples (Portainer Friendly): 'pro=gemini-4-neon:15,flash=gemini-4-hydrogen:50,lite=gemini-3.5-flash-lite:500'
+        Modelos de fallback que não constam em GOOGLE_MODEL_LIMITS recebem o limite
+        informado em ':limite' ou o padrão 20, sem entrar na fila de modelos titulares.
         """
         self._tier_fallbacks = {}
         self._fallback_only_models = set()
@@ -255,13 +256,40 @@ class APIKeyRotator:
             if not model_str:
                 continue
 
+            explicit_limit = None
+            if ":" in model_str:
+                base_part, suffix = model_str.rsplit(":", 1)
+                suffix_clean = suffix.strip()
+                if suffix_clean and suffix_clean.lower() not in self.TIER_ALIASES:
+                    try:
+                        parsed_limit = int(suffix_clean)
+                        if parsed_limit > 0:
+                            explicit_limit = parsed_limit
+                        else:
+                            self.logger.warning(
+                                f"Limite inválido '{suffix_clean}' em GOOGLE_TIER_FALLBACKS para '{raw_tier}'. "
+                                f"Usando padrão {self.DEFAULT_FALLBACK_MODEL_LIMIT}."
+                            )
+                        model_str = base_part.strip()
+                    except ValueError:
+                        pass
+
+            if not model_str:
+                continue
+
             clean_model, _ = self._parse_model_key_and_tier(model_str)
             self._tier_fallbacks[canonical_tier] = clean_model
 
             if clean_model not in self._model_limits:
-                self._model_limits[clean_model] = self.DEFAULT_FALLBACK_MODEL_LIMIT
+                self._model_limits[clean_model] = (
+                    explicit_limit
+                    if explicit_limit is not None
+                    else self.DEFAULT_FALLBACK_MODEL_LIMIT
+                )
                 self._model_tiers[clean_model] = canonical_tier
                 self._fallback_only_models.add(clean_model)
+            elif explicit_limit is not None:
+                self._model_limits[clean_model] = explicit_limit
 
         if self._tier_fallbacks:
             self.logger.info(
