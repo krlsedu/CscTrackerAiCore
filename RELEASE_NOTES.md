@@ -1,12 +1,10 @@
-Release Notes - v26.47.001
+Release Notes - v26.47.002
 
-Abaixo estão as notas de atualização para a versão v26.47.001. Esta versão foca no aumento da robustez, observabilidade e tolerância a falhas na camada de integração com modelos de inteligência artificial. Foram implementados pools de chaves dedicados com fallback automático por tiers de modelo e mecanismos avançados de telemetria e persistência no ClickHouse.
+Abaixo estão as notas de atualização para a versão v26.47.002. Esta versão introduz a capacidade de definir limites opcionais de tentativas ou quotas na estratégia de fallback de tiers para a API do Google, aprimorando a resiliência e o controle de consumo de chaves no componente ApiKeyRotator. A mudança é acompanhada de cobertura abrangente de testes unitários e atualização completa da documentação e memórias de arquitetura do projeto.
 
 ## 🚀 Features
-* **IaProcessor & Telemetry:** Implementação de pool de recursos dedicado para o Gemini, integração avançada com ClickHouseDb para armazenamento de métricas operacionais e aprimoramento na camada de resiliência e telemetria de chamadas de IA. A alteração visa viabilizar a rastreabilidade em tempo real de latência, consumo e falhas, aumentando a confiabilidade na ingestão de dados e suportando uma cobertura extensiva de testes de estresse e resiliência (`csctracker_ai_core/service/ClickHouseDb.py`).
-  * *Commit: `12f3b6d` | Autor: @krlsedu*
-* **ApiKeyRotator & IaProcessor:** Introdução de estratégia de degradação graciosa com fallback dinâmico entre tiers de modelos após a ocorrência de duas falhas consecutivas, aliada ao rodízio de chaves de API. Essa abordagem mitiga indisponibilidades e esgotamento de cotas em provedores de LLM, redirecionando as requisições de forma transparente para modelos de contingência sem interrupção do processamento (`csctracker_ai_core/service/ApiKeyRotator.py`).
-  * *Commit: `d84e789` | Autor: @krlsedu*
+* **ApiKeyRotator / Fallback de Tiers:** Implementação de suporte a limites opcionais configuráveis na variável de ambiente/definição de `GOOGLE_TIER_FALLBACKS`, permitindo delimitar a quantidade de tentativas ou quota máxima de uso por nível de fallback antes da rotação definitiva de tier. Esta evolução visa conferir controle granular sobre a degradação graciosa do serviço ao consumir modelos do Google, evitando custos excessivos ou esgotamento prematuro de chaves prioritárias, além de incluir suíte de testes unitários dedicada para validar a nova lógica de chaveamento (`csctracker_ai_core/service/ApiKeyRotator.py`).
+  * *Commit: `3688ae1` | Autor: @krlsedu*
 
 ## 🐛 Fixes
 *(Nenhuma alteração desta categoria nesta versão)*
