@@ -82,6 +82,7 @@ class APIKeyRotator:
         self._free_index = 0
         self._paid_index = 0
         self._lock = Lock()
+        self._on_key_removed_callbacks = []
 
         # Regex Compilados para detecção de erro
         self._regex_429 = re.compile(r"(429|RESOURCE_EXHAUSTED)", re.IGNORECASE)
@@ -740,14 +741,32 @@ class APIKeyRotator:
             target += timedelta(days=1)
         return int((target - now_utc).total_seconds()) + 300
 
+    def register_on_key_removed(self, callback):
+        """Registra callback(key) executado quando uma chave é removida do pool."""
+        if callable(callback):
+            with self._lock:
+                if callback not in self._on_key_removed_callbacks:
+                    self._on_key_removed_callbacks.append(callback)
+
     def remove_key(self, key_to_remove):
+        removed = False
+        callbacks = []
         with self._lock:
             if key_to_remove in self._free_keys:
                 self._free_keys.remove(key_to_remove)
                 self._all_keys_count -= 1
-                return True
-            if key_to_remove in self._paid_keys:
+                removed = True
+            elif key_to_remove in self._paid_keys:
                 self._paid_keys.remove(key_to_remove)
                 self._all_keys_count -= 1
-                return True
-            return False
+                removed = True
+            if removed:
+                callbacks = list(self._on_key_removed_callbacks)
+
+        if removed:
+            for cb in callbacks:
+                try:
+                    cb(key_to_remove)
+                except Exception as e:
+                    self.logger.warning(f"Erro em callback on_key_removed: {e}")
+        return removed

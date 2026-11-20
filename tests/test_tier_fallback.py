@@ -26,6 +26,7 @@ if "google" not in sys.modules:
 
     genai_types_mod.GenerateContentConfig = _DummyConfig
     genai_types_mod.ThinkingConfig = _DummyConfig
+    genai_types_mod.HttpOptions = _DummyConfig
     genai_types_mod.Part = _DummyPart
     genai_mod.types = genai_types_mod
     genai_mod.Client = MagicMock()
@@ -171,7 +172,9 @@ class TestIaProcessorTierFallback(unittest.TestCase):
         free_keys=None,
         fallbacks="flash=gemini-2.5-flash",
     ):
-        with patch("csctracker_ai_core.service.IaProcessor.ClickHouseDb") as ch_cls:
+        with patch.dict(
+            os.environ, {"GOOGLE_RETRY_BACKOFF_BASE_SECONDS": "0"}, clear=False
+        ), patch("csctracker_ai_core.service.IaProcessor.ClickHouseDb") as ch_cls:
             ch_instance = MagicMock()
             ch_cls.return_value = ch_instance
             proc = IaProcessor(

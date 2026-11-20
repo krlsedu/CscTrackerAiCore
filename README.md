@@ -61,6 +61,17 @@ As seguintes variáveis de ambiente são suportadas:
 | `GOOGLE_PAID_KEYS` | Lista de chaves pagas (separadas por vírgula) | `key_paga1` |
 | `GOOGLE_MODEL_LIMITS` | Limites de concorrência por modelo (aceita tag opcional `:tier`) | `gemini-4-hydrogen:flash=5,gemini-4-argon:pro=2` |
 | `GOOGLE_TIER_FALLBACKS` | Modelo fallback por tier canônico (`lite`, `flash`, `pro`, `ultra`) | `flash=gemini-2.5-flash,pro=gemini-2.5-pro` |
+| `GOOGLE_TIMEOUT_STANDARD_SECONDS` | Timeout HTTP (em segundos) para chamadas `standard` (default: `300`) | `300` |
+| `GOOGLE_TIMEOUT_FLEX_SECONDS` | Timeout HTTP (em segundos) para chamadas `flex` (default: `600`) | `600` |
+| `GOOGLE_RETRY_BACKOFF_BASE_SECONDS` | Atraso base (s) do backoff exponencial com jitter em erros transitórios (default: `0.5`) | `0.5` |
+| `GOOGLE_RETRY_BACKOFF_MAX_SECONDS` | Teto (s) do backoff exponencial em erros transitórios (default: `4.0`) | `4.0` |
+| `CLICKHOUSE_CONNECT_TIMEOUT` | Timeout de conexão (s) com o ClickHouse (default: `5`) | `5` |
+| `CLICKHOUSE_SEND_RECEIVE_TIMEOUT` | Timeout de leitura/escrita (s) no ClickHouse (default: `30`) | `30` |
+| `CLICKHOUSE_ASYNC_TELEMETRY` | Habilita telemetria assíncrona em fila com batching (default: `true`) | `true` |
+| `CLICKHOUSE_QUEUE_MAXSIZE` | Limite máximo de eventos na fila assíncrona (default: `10000`) | `10000` |
+| `CLICKHOUSE_QUEUE_MAX_MB` | Teto de RAM (MB) aproximado para `payload + result` na fila (default: `500`) | `500` |
+| `CLICKHOUSE_BATCH_SIZE` | Quantidade de eventos por lote de inserção no ClickHouse (default: `20`) | `20` |
+| `CLICKHOUSE_FLUSH_INTERVAL_SECONDS` | Intervalo máximo (s) para flush do lote pendente (default: `5.0`) | `5.0` |
 
 > **Nota sobre `GOOGLE_MODEL_LIMITS`**: Aceita o formato simples `modelo=limite,modelo2=limite2` (com tag opcional `:tier`) ou um JSON `{"modelo": limite}`.
 >
@@ -116,6 +127,7 @@ resultado, tokens, event_id = processor.analisar_com_gemini(
 - `mime_type` (str, default `"image/jpeg"`): Tipo do arquivo enviado em `file_base64`.
 - `thinking_level` (str, default `"high"`): Nível de raciocínio enviado em `ThinkingConfig`.
 - `service_tier` (str, default `"standard"`): Modo de execução (`"standard"` ou `"flex"`). O controle de fallback por tier (2 erros consecutivos + cooldown de 5 min) é isolado por `service_tier`.
+- `timeout` (float, opcional): Override pontual do timeout HTTP em segundos para esta chamada (quando omitido, utiliza `GOOGLE_TIMEOUT_STANDARD_SECONDS` ou `GOOGLE_TIMEOUT_FLEX_SECONDS`).
 
 **Retorno:**
 - `resultado`: Resposta da IA (dict se `return_json=True`, str caso contrário).

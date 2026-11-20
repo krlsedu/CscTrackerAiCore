@@ -298,12 +298,18 @@ ORDER BY data DESC,
 
         params = {"start_date": start_date, "end_date": end_date}
 
+        client = None
         try:
             client = self.db.get_ch_client()
             result = client.query(sql, parameters=params)
             data = result.named_results()
-            client.close()
             return list(data)
         except Exception as e:
             logging.error(f"Erro ao obter telemetria: {e}")
             return []
+        finally:
+            if client is not None:
+                try:
+                    client.close()
+                except Exception:
+                    pass

@@ -22,6 +22,9 @@ updated_at: 2026-11-20
 ---
 
 ## 📜 Registro de Decisões (ADRs)
+- **[2026-11-20] Pool de `genai.Client`, Timeout Explícito, Backoff Transitório, Conexão Persistente e Telemetria Assíncrona em Lote (IDs 80, 81 e 82):**
+  - `IaProcessor` reutiliza `genai.Client` por `(api_key, timeout_ms)` com `HttpOptions(timeout=...)` (`300s` standard / `600s` flex / override `timeout`), fecha clientes ao remover chaves inválidas ou no `close()`/`atexit`, aplica backoff exponencial com jitter somente em erros transitórios (nunca em `429` ou `JSONDecodeError`) e libera o slot antes da telemetria/JSON com guarda contra *double-release*.
+  - `ClickHouseDb` consolida `init_db()` em 1 conexão persistente protegida por `threading.Lock` com auto-reconexão e timeouts configuráveis (`5s`/`30s`), enfileira eventos de telemetria de forma não-bloqueante em `queue.Queue` (limites de 10.000 eventos / 500 MB) com worker daemon `ClickHouseTelemetryWorker` gravando em batches (`20` eventos ou `5.0s`), 1 retry com reconexão, `flush()`/`close()` gracioso e kill-switch `CLICKHOUSE_ASYNC_TELEMETRY=false`; `Telemetry.py` garante `client.close()` em `finally:`.
 - **[2026-11-20] Fallback de Modelo por Tier com Cooldown Isolado por `service_tier` (ID 79):**
   - Adicionada a ENV `GOOGLE_TIER_FALLBACKS` (JSON ou `tier=modelo`, limite padrão `20` quando fora de `GOOGLE_MODEL_LIMITS` sem furar a fila primária).
   - Contadores de 2 erros consecutivos não-cota (API/5xx/timeout + `JSONDecodeError`) e cooldown de 5 minutos (`300s`) são indexados por `(service_tier, tier)` no `APIKeyRotator`, isolando completamente instabilidades do modo `flex` do modo `standard` e alternando de volta ao modelo principal caso o fallback também falhe 2x seguidas.
