@@ -1,10 +1,12 @@
-Release Notes - v26.46.002
+Release Notes - v26.47.001
 
-Abaixo estão as notas de atualização para a versão v26.46.002. Esta versão implementa o controle de vigência temporal na precificação do serviço de Telemetria, garantindo maior precisão contábil e conformidade no cálculo de custos operacionais com base no período de consumo. Além disso, a documentação interna, memórias técnicas e diretrizes de agentes de IA foram amplamente atualizadas para suportar e padronizar as novas regras arquiteturais do sistema.
+Abaixo estão as notas de atualização para a versão v26.47.001. Esta versão foca no aumento da robustez, observabilidade e tolerância a falhas na camada de integração com modelos de inteligência artificial. Foram implementados pools de chaves dedicados com fallback automático por tiers de modelo e mecanismos avançados de telemetria e persistência no ClickHouse.
 
 ## 🚀 Features
-* **Telemetria e Custos:** Implementação da lógica de vigência temporal de preços no serviço de telemetria, permitindo que a contabilização e faturamento do consumo de recursos considerem tabelas de preços indexadas por período de validade (`csctracker_ai_core/service/Telemetry.py`). A alteração foi motivada pela necessidade de refletir reajustes e variações históricas de tarifas sem distorcer registros passados ou futuros. Como impacto prático, o sistema ganha maior fidelidade financeira e rastreabilidade nos relatórios de custos de telemetria, acompanhado da atualização das diretrizes de arquitetura e documentações de IA para suportar o novo fluxo.
-  * *Commit: `14468ad` | Autor: @krlsedu*
+* **IaProcessor & Telemetry:** Implementação de pool de recursos dedicado para o Gemini, integração avançada com ClickHouseDb para armazenamento de métricas operacionais e aprimoramento na camada de resiliência e telemetria de chamadas de IA. A alteração visa viabilizar a rastreabilidade em tempo real de latência, consumo e falhas, aumentando a confiabilidade na ingestão de dados e suportando uma cobertura extensiva de testes de estresse e resiliência (`csctracker_ai_core/service/ClickHouseDb.py`).
+  * *Commit: `12f3b6d` | Autor: @krlsedu*
+* **ApiKeyRotator & IaProcessor:** Introdução de estratégia de degradação graciosa com fallback dinâmico entre tiers de modelos após a ocorrência de duas falhas consecutivas, aliada ao rodízio de chaves de API. Essa abordagem mitiga indisponibilidades e esgotamento de cotas em provedores de LLM, redirecionando as requisições de forma transparente para modelos de contingência sem interrupção do processamento (`csctracker_ai_core/service/ApiKeyRotator.py`).
+  * *Commit: `d84e789` | Autor: @krlsedu*
 
 ## 🐛 Fixes
 *(Nenhuma alteração desta categoria nesta versão)*
