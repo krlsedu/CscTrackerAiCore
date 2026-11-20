@@ -54,10 +54,15 @@ class IaProcessor:
         google_models_limits=None,
         google_free_keys=None,
         google_paid_keys=None,
+        google_tier_fallbacks=None,
     ):
         self.logger = logging.getLogger()
         self.api_key_rotator = APIKeyRotator(
-            self.logger, google_models_limits, google_free_keys, google_paid_keys
+            self.logger,
+            google_models_limits,
+            google_free_keys,
+            google_paid_keys,
+            google_tier_fallbacks=google_tier_fallbacks,
         )
         self.click_house = ClickHouseDb(host, port, username, password)
 
@@ -82,10 +87,21 @@ class IaProcessor:
         logger = self.logger
         rotator = self.api_key_rotator
 
+        if not service_tier or service_tier.lower() not in ("flex", "standard"):
+            service_tier = "standard"
+        else:
+            service_tier = service_tier.lower()
+
         ano_atual = time.strftime("%Y")
         prompt_final = f"{prompt} {ano_atual}\n{input_text}"
 
         self.estimate_tokens_rough(prompt_final)
+
+        def _resolve_effective_tier(m_name: str) -> str:
+            req_tier = rotator.resolve_requested_tier(model_variant)
+            if req_tier and rotator.get_tier_fallback(req_tier):
+                return req_tier
+            return rotator.get_model_tier(m_name)
 
         # Loop de tentativas baseado na capacidade instalada
         max_tentativas = rotator.get_total_capacity() + 2
@@ -94,14 +110,19 @@ class IaProcessor:
         while tentativa_atual < max_tentativas:
             tentativa_atual += 1
 
-            key, model_name, tier = rotator.select_and_reserve_best_slot(
-                model_variant=model_variant,
-                forced_free=forced_free,
-                forced_paid=forced_paid,
-            )
-
-            if service_tier.lower() not in ("flex", "standard"):
-                service_tier = "standard"
+            if service_tier == "flex":
+                key, model_name, tier = rotator._select_and_reserve_slot(
+                    model_variant=model_variant,
+                    forced_free=forced_free,
+                    forced_paid=forced_paid,
+                    service_tier="flex",
+                )
+            else:
+                key, model_name, tier = rotator.select_and_reserve_best_slot(
+                    model_variant=model_variant,
+                    forced_free=forced_free,
+                    forced_paid=forced_paid,
+                )
 
             if not key:
                 logger.warning("Nenhum slot disponível no momento. Aguardando...")
@@ -186,14 +207,26 @@ class IaProcessor:
 
                 try:
                     if return_json:
-                        return json.loads(response.text), input_tokens, event_id
+                        parsed_result = json.loads(response.text)
                     else:
-                        return response.text, input_tokens, event_id
+                        parsed_result = response.text
                 except json.JSONDecodeError:
                     logger.error(
                         f"JSON inválido retornado pelo Gemini (Key: {key[:5]}...)"
                     )
+                    rotator.registrar_erro_modelo(
+                        model_name,
+                        _resolve_effective_tier(model_name),
+                        service_tier=service_tier,
+                    )
                     continue
+
+                rotator.registrar_sucesso_modelo(
+                    model_name,
+                    _resolve_effective_tier(model_name),
+                    service_tier=service_tier,
+                )
+                return parsed_result, input_tokens, event_id
 
             except Exception as e:
 
@@ -208,6 +241,11 @@ class IaProcessor:
                     continue
                 else:
                     logger.error(f"Erro na API Gemini: {e}")
+                    rotator.registrar_erro_modelo(
+                        model_name,
+                        _resolve_effective_tier(model_name),
+                        service_tier=service_tier,
+                    )
                     continue
 
         logger.error("Todas as tentativas de conexão com o Gemini falharam.")

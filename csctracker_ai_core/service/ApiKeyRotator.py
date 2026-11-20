@@ -29,6 +29,10 @@ class APIKeyRotator:
 
     CANONICAL_TIERS = ("lite", "flash", "pro", "ultra")
 
+    DEFAULT_FALLBACK_MODEL_LIMIT = 20
+    DEFAULT_FALLBACK_ERROR_THRESHOLD = 2
+    DEFAULT_FALLBACK_COOLDOWN_SECONDS = 300
+
     TIER_ALIASES = {
         "lite": "lite",
         "flash-lite": "lite",
@@ -44,11 +48,17 @@ class APIKeyRotator:
         google_models_limits=None,
         google_free_keys=None,
         google_paid_keys=None,
+        google_tier_fallbacks=None,
+        fallback_error_threshold: int = DEFAULT_FALLBACK_ERROR_THRESHOLD,
+        fallback_cooldown_seconds: int = DEFAULT_FALLBACK_COOLDOWN_SECONDS,
     ):
         self.logger = logger
         self.google_models_limits = google_models_limits
         self.google_free_keys = google_free_keys
         self.google_paid_keys = google_paid_keys
+        self.google_tier_fallbacks = google_tier_fallbacks
+        self.fallback_error_threshold = max(1, int(fallback_error_threshold))
+        self.fallback_cooldown_seconds = max(1, int(fallback_cooldown_seconds))
 
         # Estruturas de dados separadas por TIER
         self._free_keys = []
@@ -58,11 +68,15 @@ class APIKeyRotator:
         self._models = []
         self._model_limits = {}
         self._model_tiers = {}  # {model_name: canonical_tier}
+        self._tier_fallbacks = {}  # {canonical_tier: fallback_model_name}
+        self._fallback_only_models = set()
 
         # Controle de estado
         self._active_slots = {}  # {key: {model: count}}
         self._suspended_until = {}  # {key: {model: timestamp}}
         self._models_by_key = {}  # {key: [modelos_ordenados_por_custo]}
+        self._consecutive_errors = {}  # {(service_tier, model_name, canonical_tier): count}
+        self._tier_fallback_until = {}  # {(service_tier, canonical_tier): timestamp}
 
         # Índices para Round-Robin (Balanceamento de Carga)
         self._free_index = 0
@@ -78,8 +92,9 @@ class APIKeyRotator:
             r"(API_KEY_INVALID|key not valid|unauthorized)", re.IGNORECASE
         )
 
-        # 1. Carregar Configuração de Modelos (ENV ou Default)
+        # 1. Carregar Configuração de Modelos e Fallbacks por Tier (ENV ou Default)
         self._load_model_config()
+        self._load_tier_fallbacks()
 
         # 2. Carregar Chaves (Separando Free e Paga)
         self.load_keys()
@@ -180,6 +195,78 @@ class APIKeyRotator:
 
         self._models = list(self._model_limits.keys())
 
+    def _load_tier_fallbacks(self):
+        """
+        Lê a ENV 'GOOGLE_TIER_FALLBACKS' (ou parâmetro google_tier_fallbacks).
+        Suporta dois formatos:
+        1. JSON: '{"flash": "gemini-2.5-flash", "pro": "gemini-2.5-pro"}'
+        2. Simples (Portainer Friendly): 'flash=gemini-2.5-flash,pro=gemini-2.5-pro,lite=gemini-2.5-flash-lite'
+        Modelos de fallback que não constam em GOOGLE_MODEL_LIMITS recebem limite padrão 20.
+        """
+        self._tier_fallbacks = {}
+        self._fallback_only_models = set()
+
+        env_config = self.google_tier_fallbacks
+        if env_config is None:
+            env_config = os.getenv("GOOGLE_TIER_FALLBACKS")
+
+        if not env_config:
+            return
+
+        raw_fallbacks = {}
+        if isinstance(env_config, dict):
+            raw_fallbacks = env_config
+        else:
+            env_str = str(env_config).strip()
+            if not env_str:
+                return
+            if env_str.startswith("{"):
+                try:
+                    parsed = json.loads(env_str)
+                    if isinstance(parsed, dict):
+                        raw_fallbacks = parsed
+                except json.JSONDecodeError:
+                    self.logger.error(
+                        "JSON inválido em GOOGLE_TIER_FALLBACKS. Ignorando fallbacks por tier."
+                    )
+                    return
+            else:
+                try:
+                    for item in env_str.split(","):
+                        if "=" in item:
+                            tier_key, model_val = item.split("=", 1)
+                            raw_fallbacks[tier_key.strip()] = model_val.strip()
+                except Exception as e:
+                    self.logger.error(
+                        f"Erro ao ler GOOGLE_TIER_FALLBACKS: {e}. Ignorando fallbacks por tier."
+                    )
+                    return
+
+        for raw_tier, raw_model in raw_fallbacks.items():
+            canonical_tier = self.TIER_ALIASES.get(str(raw_tier).strip().lower())
+            if not canonical_tier:
+                self.logger.warning(
+                    f"Tier desconhecido em GOOGLE_TIER_FALLBACKS: '{raw_tier}'. Ignorando."
+                )
+                continue
+
+            model_str = str(raw_model or "").strip()
+            if not model_str:
+                continue
+
+            clean_model, _ = self._parse_model_key_and_tier(model_str)
+            self._tier_fallbacks[canonical_tier] = clean_model
+
+            if clean_model not in self._model_limits:
+                self._model_limits[clean_model] = self.DEFAULT_FALLBACK_MODEL_LIMIT
+                self._model_tiers[clean_model] = canonical_tier
+                self._fallback_only_models.add(clean_model)
+
+        if self._tier_fallbacks:
+            self.logger.info(
+                f"Fallbacks por tier carregados: {self._tier_fallbacks}"
+            )
+
     def _get_model_weight(self, model_name: str) -> int:
         """
         Retorna o peso de custo/capacidade do modelo para ordenação:
@@ -251,13 +338,123 @@ class APIKeyRotator:
     def _setup_key_state(self, key, sorted_models):
         if key not in self._models_by_key:
             self._models_by_key[key] = sorted_models.copy()
-            self._active_slots[key] = {model: 0 for model in self._models}
+            self._active_slots[key] = {model: 0 for model in self._model_limits}
             self._suspended_until[key] = {}
 
     def get_total_capacity(self):
         """Retorna capacidade total para cálculo de tentativas máximas."""
         with self._lock:
-            return max(1, self._all_keys_count * len(self._models))
+            total_models = len(self._model_limits) or len(self._models)
+            return max(1, self._all_keys_count * total_models)
+
+    # --- LÓGICA DE FALLBACK POR TIER (2 ERROS CONSECUTIVOS) ---
+
+    def get_model_tier(self, model_name: str) -> str:
+        """Retorna o tier canônico ('lite', 'flash', 'pro', 'ultra') do modelo."""
+        return self._model_tiers.get(model_name) or self._infer_model_tier(model_name)
+
+    def resolve_requested_tier(self, model_variant: str = None, variant_family: str = None):
+        """Resolve um alias de tier canônico a partir de variant_family ou model_variant."""
+        return self._resolve_requested_tier(model_variant, variant_family)
+
+    def get_tier_fallback(self, tier: str):
+        """Retorna o nome do modelo fallback configurado para o tier canônico, ou None."""
+        canonical = self.TIER_ALIASES.get((tier or "").strip().lower())
+        if not canonical:
+            return None
+        return self._tier_fallbacks.get(canonical)
+
+    @staticmethod
+    def _normalize_service_tier(service_tier: str = "standard") -> str:
+        """Normaliza service_tier para 'flex' ou 'standard'."""
+        return "flex" if (service_tier or "").strip().lower() == "flex" else "standard"
+
+    def _is_tier_fallback_active_unlocked(
+        self, tier: str, current_time: float, service_tier: str = "standard"
+    ) -> bool:
+        """Verifica (sem lock) se o fallback de (service_tier, tier) está ativo no cooldown."""
+        if not tier:
+            return False
+        st = self._normalize_service_tier(service_tier)
+        key = (st, tier)
+        if key not in self._tier_fallback_until:
+            return False
+        if current_time < self._tier_fallback_until[key]:
+            return True
+        del self._tier_fallback_until[key]
+        return False
+
+    def is_tier_fallback_active(
+        self, tier: str, current_time: float = None, service_tier: str = "standard"
+    ) -> bool:
+        """Verifica de forma thread-safe se o fallback de (service_tier, tier) está ativo."""
+        canonical = self.TIER_ALIASES.get((tier or "").strip().lower())
+        if not canonical:
+            return False
+        with self._lock:
+            now = time.time() if current_time is None else current_time
+            return self._is_tier_fallback_active_unlocked(
+                canonical, now, service_tier=service_tier
+            )
+
+    def registrar_sucesso_modelo(
+        self, model: str, tier: str = None, service_tier: str = "standard"
+    ):
+        """Zera a contagem de erros consecutivos de (service_tier, model, tier) após resposta válida."""
+        st = self._normalize_service_tier(service_tier)
+        canonical = (
+            self.TIER_ALIASES.get((tier or "").strip().lower())
+            or self.get_model_tier(model)
+        )
+        with self._lock:
+            self._consecutive_errors[(st, model, canonical)] = 0
+
+    def registrar_erro_modelo(
+        self, model: str, tier: str = None, service_tier: str = "standard"
+    ):
+        """
+        Registra erro não-cota consecutivo para (service_tier, model, tier),
+        isolando completamente o estado entre 'standard' e 'flex'.
+        - Após 2 erros consecutivos no modelo principal: ativa o fallback do tier por 5 minutos para aquele service_tier.
+        - Após 2 erros consecutivos no modelo fallback: desativa o fallback para alternar de volta ao principal.
+        Retorna o nome do modelo fallback ativado, 'primary' ao voltar para o principal, ou None.
+        """
+        st = self._normalize_service_tier(service_tier)
+        canonical = (
+            self.TIER_ALIASES.get((tier or "").strip().lower())
+            or self.get_model_tier(model)
+        )
+        with self._lock:
+            fb_model = self._tier_fallbacks.get(canonical)
+            if not fb_model:
+                return None
+
+            error_key = (st, model, canonical)
+            count = self._consecutive_errors.get(error_key, 0) + 1
+            self._consecutive_errors[error_key] = count
+
+            if count < self.fallback_error_threshold:
+                return None
+
+            self._consecutive_errors[error_key] = 0
+            cooldown_key = (st, canonical)
+
+            if model == fb_model:
+                self._tier_fallback_until.pop(cooldown_key, None)
+                self.logger.warning(
+                    f"[{st}] Fallback '{fb_model}' do tier '{canonical}' falhou {count}x seguidas. "
+                    f"Alternando de volta para o modelo principal."
+                )
+                return "primary"
+
+            self._tier_fallback_until[cooldown_key] = (
+                time.time() + self.fallback_cooldown_seconds
+            )
+            self.logger.warning(
+                f"[{st}] Modelo '{model}' (tier '{canonical}') falhou {count}x seguidas. "
+                f"Ativando fallback '{fb_model}' por {self.fallback_cooldown_seconds}s (somente {st})."
+            )
+            return fb_model
 
     # --- LÓGICA DE SELEÇÃO DE SLOT (CASCATA + ROUND ROBIN) ---
 
@@ -290,9 +487,13 @@ class APIKeyRotator:
             if requested_tier:
                 if model_tier == requested_tier:
                     return True
-                # Se pediu 'pro' e não há nenhum modelo 'pro' configurado na lista,
+                # Se pediu 'pro' e não há nenhum modelo 'pro' primário configurado na lista,
                 # permite fallback transparente para 'ultra' (ex: carbon).
-                if requested_tier == "pro" and "pro" not in self._model_tiers.values():
+                primary_tiers = {
+                    self._model_tiers.get(m) or self._infer_model_tier(m)
+                    for m in self._models
+                }
+                if requested_tier == "pro" and "pro" not in primary_tiers:
                     return model_tier == "ultra"
                 return False
 
@@ -303,6 +504,28 @@ class APIKeyRotator:
         if exact_match:
             return model_l == target
         return target in model_l
+
+    def _try_allocate_model_on_key(self, key: str, model: str, current_time: float) -> bool:
+        """Tenta reservar 1 slot para 'model' na 'key' respeitando suspensão e limite."""
+        if model not in self._model_limits:
+            return False
+
+        # 1. Verifica Suspensão
+        if model in self._suspended_until[key]:
+            if current_time < self._suspended_until[key][model]:
+                return False
+            del self._suspended_until[key][model]
+
+        # 2. Verifica Slots Livres
+        limit = self._model_limits.get(model, 1)
+        if self._active_slots[key].get(model, 0) < limit:
+            self._active_slots[key][model] = self._active_slots[key].get(model, 0) + 1
+            self.logger.info(
+                f"Slot alocado: {model} (Free? {key in self._free_keys}) - Key: {key[:10]}..."
+            )
+            return True
+
+        return False
 
     def select_and_reserve_best_slot(
         self,
@@ -331,13 +554,39 @@ class APIKeyRotator:
           (case-insensitive). Útil para restringir, por ex., somente
           "...flash-lite" sem pegar variantes que também contém "flash".
         """
+        return self._select_and_reserve_slot(
+            model_variant=model_variant,
+            variant_family=variant_family,
+            forced_paid=forced_paid,
+            forced_free=forced_free,
+            exact_match=exact_match,
+            service_tier="standard",
+        )
+
+    def _select_and_reserve_slot(
+        self,
+        model_variant: str = None,
+        variant_family: str = None,
+        forced_paid: bool = False,
+        forced_free: bool = False,
+        exact_match: bool = False,
+        service_tier: str = "standard",
+    ):
+        """Implementação interna de seleção de slot com isolamento de fallback por service_tier."""
+        st = self._normalize_service_tier(service_tier)
         with self._lock:
             current_time = time.time()
 
             # TIER 1: Tenta Free Keys
             if not forced_paid:
                 key, model = self._find_slot_in_list(
-                    self._free_keys, self._free_index, current_time, model_variant, variant_family, exact_match
+                    self._free_keys,
+                    self._free_index,
+                    current_time,
+                    model_variant,
+                    variant_family,
+                    exact_match,
+                    service_tier=st,
                 )
                 if key:
                     self._free_index = (self._free_index + 1) % len(self._free_keys)
@@ -346,7 +595,13 @@ class APIKeyRotator:
             # TIER 2: Tenta Paid Keys (Fallback)
             if not forced_free:
                 key, model = self._find_slot_in_list(
-                    self._paid_keys, self._paid_index, current_time, model_variant, variant_family, exact_match
+                    self._paid_keys,
+                    self._paid_index,
+                    current_time,
+                    model_variant,
+                    variant_family,
+                    exact_match,
+                    service_tier=st,
                 )
                 if key:
                     self._paid_index = (self._paid_index + 1) % len(self._paid_keys)
@@ -355,18 +610,56 @@ class APIKeyRotator:
             return None, None, None
 
     def _find_slot_in_list(
-        self, keys_list, start_index, current_time, model_variant: str = None, variant_family: str = None, exact_match: bool = False
+        self,
+        keys_list,
+        start_index,
+        current_time,
+        model_variant: str = None,
+        variant_family: str = None,
+        exact_match: bool = False,
+        service_tier: str = "standard",
     ):
         """Helper para iterar numa lista circularmente (Round-Robin)."""
         count = len(keys_list)
         if count == 0:
             return None, None
 
+        requested_tier = (
+            None
+            if exact_match
+            else self._resolve_requested_tier(model_variant, variant_family)
+        )
+
+        # Caso 1: exact_match pode selecionar inclusive modelos registrados apenas como fallback
+        if exact_match:
+            target = (variant_family or model_variant or "").strip().lower()
+            if target:
+                for i in range(count):
+                    idx = (start_index + i) % count
+                    key = keys_list[idx]
+                    for model in self._model_limits:
+                        if model.lower() == target:
+                            if self._try_allocate_model_on_key(key, model, current_time):
+                                return key, model
+                return None, None
+
+        # Caso 2: Tier explícito com fallback ativo no cooldown daquele service_tier
+        if requested_tier and self._is_tier_fallback_active_unlocked(
+            requested_tier, current_time, service_tier=service_tier
+        ):
+            fb_model = self._tier_fallbacks.get(requested_tier)
+            if fb_model:
+                for i in range(count):
+                    idx = (start_index + i) % count
+                    key = keys_list[idx]
+                    if self._try_allocate_model_on_key(key, fb_model, current_time):
+                        return key, fb_model
+
         for i in range(count):
             idx = (start_index + i) % count
             key = keys_list[idx]
 
-            # Itera sobre os modelos dessa chave (já ordenados por prioridade/custo)
+            # Itera sobre os modelos primários dessa chave (já ordenados por prioridade/custo)
             for model in self._models_by_key[key]:
                 # 0. Filtra por variante/tier se informado
                 if not self._matches_model_filter(
@@ -374,20 +667,19 @@ class APIKeyRotator:
                 ):
                     continue
 
-                # 1. Verifica Suspensão
-                if model in self._suspended_until[key]:
-                    if current_time < self._suspended_until[key][model]:
-                        continue
-                    else:
-                        del self._suspended_until[key][model]
+                # Sem filtro de tier explícito (ex: model_variant=None): respeita fallback ativo do tier do modelo
+                if not exact_match and not requested_tier:
+                    m_tier = self.get_model_tier(model)
+                    if self._is_tier_fallback_active_unlocked(
+                        m_tier, current_time, service_tier=service_tier
+                    ):
+                        fb_model = self._tier_fallbacks.get(m_tier)
+                        if fb_model and self._try_allocate_model_on_key(
+                            key, fb_model, current_time
+                        ):
+                            return key, fb_model
 
-                # 2. Verifica Slots Livres
-                limit = self._model_limits.get(model, 1)
-                if self._active_slots[key][model] < limit:
-                    self._active_slots[key][model] += 1
-                    self.logger.info(
-                        f"Slot alocado: {model} (Free? {key in self._free_keys}) - Key: {key[:10]}..."
-                    )
+                if self._try_allocate_model_on_key(key, model, current_time):
                     return key, model
 
         return None, None

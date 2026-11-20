@@ -14,6 +14,7 @@ CscTrackerAiCore é uma biblioteca Python desenvolvida para facilitar a integra�
 - **Rotação Inteligente de Chaves (API Key Rotation)**:
     - Gerenciamento automático de múltiplas chaves de API (gratuitas e pagas).
     - Mecanismo de fallback: tenta chaves gratuitas primeiro e migra para pagas se necessário.
+    - **Fallback de Modelo por Tier (`GOOGLE_TIER_FALLBACKS`)**: após 2 erros consecutivos não-cota (exceções de API/5xx/timeout ou `JSONDecodeError`), ativa o modelo fallback do tier (`lite`, `flash`, `pro`, `ultra`) por **5 minutos (`300s`)**, com estado isolado por `service_tier` (`standard` e `flex` independentes) e alternância de volta ao principal se o próprio fallback falhar 2x seguidas.
     - Tratamento de limites de quota (Error 429) com suspensão temporária de chaves/modelos atingidos.
     - Retry automático em caso de falhas.
 - **Telemetria e Observabilidade**:
@@ -58,9 +59,12 @@ As seguintes variáveis de ambiente são suportadas:
 | `CLICKHOUSE_DB` | Nome do banco de dados | `default` |
 | `GOOGLE_FREE_KEYS` | Lista de chaves gratuitas (separadas por vírgula) | `key1,key2` |
 | `GOOGLE_PAID_KEYS` | Lista de chaves pagas (separadas por vírgula) | `key_paga1` |
-| `GOOGLE_MODEL_LIMITS` | Limites de concorrência por modelo | `gemini-1.5-flash=15,gemini-1.5-pro=2` |
+| `GOOGLE_MODEL_LIMITS` | Limites de concorrência por modelo (aceita tag opcional `:tier`) | `gemini-4-hydrogen:flash=5,gemini-4-argon:pro=2` |
+| `GOOGLE_TIER_FALLBACKS` | Modelo fallback por tier canônico (`lite`, `flash`, `pro`, `ultra`) | `flash=gemini-2.5-flash,pro=gemini-2.5-pro` |
 
-> **Nota sobre `GOOGLE_MODEL_LIMITS`**: Aceita o formato simples `modelo=limite,modelo2=limite2` ou um JSON `{"modelo": limite}`.
+> **Nota sobre `GOOGLE_MODEL_LIMITS`**: Aceita o formato simples `modelo=limite,modelo2=limite2` (com tag opcional `:tier`) ou um JSON `{"modelo": limite}`.
+>
+> **Nota sobre `GOOGLE_TIER_FALLBACKS`**: Aceita o formato simples `tier=modelo,tier2=modelo2` ou um JSON `{"flash": "gemini-2.5-flash"}`. Se o modelo fallback não estiver listado em `GOOGLE_MODEL_LIMITS`, ele recebe automaticamente o **limite padrão de `20` slots** e só é utilizado quando o fallback do tier estiver ativo. O cooldown de **5 minutos (`300s`)** após 2 erros consecutivos é mantido de forma **independente por `service_tier`** (`flex` não afeta `standard` e vice-versa).
 
 ## Uso Didático
 
@@ -80,9 +84,10 @@ processor = IaProcessor(
 
 **Parâmetros do Construtor:**
 - `host`, `port`, `username`, `password`: Credenciais do ClickHouse.
-- `google_free_keys`: Lista de strings com chaves API do Google AI Studio (tier gratuito).
-- `google_paid_keys`: Lista de strings com chaves API faturadas (tier pago).
+- `google_free_keys`: String separada por vírgulas com chaves API do Google AI Studio (tier gratuito).
+- `google_paid_keys`: String separada por vírgulas com chaves API faturadas (tier pago).
 - `google_models_limits`: Dicionário ou string mapeando o nome do modelo ao limite de requisições simultâneas.
+- `google_tier_fallbacks`: Dicionário ou string mapeando cada tier (`lite`, `flash`, `pro`, `ultra`) ao seu modelo fallback após 2 erros consecutivos.
 
 ### 2. Método `analisar_com_gemini`
 
@@ -109,6 +114,8 @@ resultado, tokens, event_id = processor.analisar_com_gemini(
 - `forced_free` (bool, default `False`): Se `True`, ignora chaves pagas mesmo que as gratuitas estejam esgotadas.
 - `forced_paid` (bool, default `False`): Se `True`, ignora chaves gratuitas e usa apenas o tier pago.
 - `mime_type` (str, default `"image/jpeg"`): Tipo do arquivo enviado em `file_base64`.
+- `thinking_level` (str, default `"high"`): Nível de raciocínio enviado em `ThinkingConfig`.
+- `service_tier` (str, default `"standard"`): Modo de execução (`"standard"` ou `"flex"`). O controle de fallback por tier (2 erros consecutivos + cooldown de 5 min) é isolado por `service_tier`.
 
 **Retorno:**
 - `resultado`: Resposta da IA (dict se `return_json=True`, str caso contrário).
