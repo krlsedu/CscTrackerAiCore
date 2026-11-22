@@ -1,13 +1,13 @@
-Release Notes - v26.47.002
+Release Notes - v26.47.003
 
-Abaixo estão as notas de atualização para a versão v26.47.002. Esta versão introduz a capacidade de definir limites opcionais de tentativas ou quotas na estratégia de fallback de tiers para a API do Google, aprimorando a resiliência e o controle de consumo de chaves no componente ApiKeyRotator. A mudança é acompanhada de cobertura abrangente de testes unitários e atualização completa da documentação e memórias de arquitetura do projeto.
+Abaixo estão as notas de atualização para a versão v26.47.003. Esta versão introduz melhorias substanciais de resiliência e estabilidade arquitetural no núcleo de processamento de inteligência artificial, blindando as transições entre tiers de modelos e prevenindo loops infinitos em fluxos de fallback. Além disso, a telemetria operacional via ClickHouse foi aprimorada com novas validações estruturais, cobertura de testes automatizados e integração de notificações de CI/CD via GitHub Actions.
 
 ## 🚀 Features
-* **ApiKeyRotator / Fallback de Tiers:** Implementação de suporte a limites opcionais configuráveis na variável de ambiente/definição de `GOOGLE_TIER_FALLBACKS`, permitindo delimitar a quantidade de tentativas ou quota máxima de uso por nível de fallback antes da rotação definitiva de tier. Esta evolução visa conferir controle granular sobre a degradação graciosa do serviço ao consumir modelos do Google, evitando custos excessivos ou esgotamento prematuro de chaves prioritárias, além de incluir suíte de testes unitários dedicada para validar a nova lógica de chaveamento (`csctracker_ai_core/service/ApiKeyRotator.py`).
-  * *Commit: `3688ae1` | Autor: @krlsedu*
+*(Nenhuma alteração desta categoria nesta versão)*
 
 ## 🐛 Fixes
 *(Nenhuma alteração desta categoria nesta versão)*
 
 ## 🔧 Chore
-*(Nenhuma alteração desta categoria nesta versão)*
+* **Resiliência e Telemetria (AI Core):** Implementação de mecanismos de proteção contra loops cíclicos de fallback e aprimoramento da estratégia de rotação de credenciais (`ApiKeyRotator`), assegurando que falhas em provedores de IA acionem a degradação graciosa para tiers secundários sem interrupções operacionais. Foi refinada a ingestão de telemetria no `ClickHouseDb` para garantir rastreabilidade detalhada dos consumos e execuções, além de implementada nova suíte de testes de estresse/resiliência (`test_resilience_and_telemetry.py` e `test_tier_fallback.py`), workflow de notificação de CI/CD (`notify-cicd.yml`) e atualização abrangente das documentações de arquitetura e skills (`csctracker_ai_core/service/IaProcessor.py`).
+  * *Commit: `61998f4` | Autor: @krlsedu*
