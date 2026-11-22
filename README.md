@@ -65,6 +65,8 @@ As seguintes variáveis de ambiente são suportadas:
 | `GOOGLE_TIMEOUT_FLEX_SECONDS` | Timeout HTTP (em segundos) para chamadas `flex` (default: `600`) | `600` |
 | `GOOGLE_RETRY_BACKOFF_BASE_SECONDS` | Atraso base (s) do backoff exponencial com jitter em erros transitórios (default: `0.5`) | `0.5` |
 | `GOOGLE_RETRY_BACKOFF_MAX_SECONDS` | Teto (s) do backoff exponencial em erros transitórios (default: `4.0`) | `4.0` |
+| `GOOGLE_MAX_NON_QUOTA_ERRORS` | Teto rígido de erros não-cota por requisição antes de abortar (default: `4`) | `4` |
+| `GOOGLE_MAX_NO_SLOT_RETRIES` | Teto rígido de esperas consecutivas por slot indisponível antes de abortar (default: `5`) | `5` |
 | `CLICKHOUSE_CONNECT_TIMEOUT` | Timeout de conexão (s) com o ClickHouse (default: `5`) | `5` |
 | `CLICKHOUSE_SEND_RECEIVE_TIMEOUT` | Timeout de leitura/escrita (s) no ClickHouse (default: `30`) | `30` |
 | `CLICKHOUSE_ASYNC_TELEMETRY` | Habilita telemetria assíncrona em fila com batching (default: `true`) | `true` |

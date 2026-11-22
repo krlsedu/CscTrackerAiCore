@@ -28,6 +28,7 @@ class APIKeyRotator:
     """
 
     CANONICAL_TIERS = ("lite", "flash", "pro", "ultra")
+    TIER_RANK = {"lite": 0, "flash": 1, "pro": 2, "ultra": 3}
 
     DEFAULT_FALLBACK_MODEL_LIMIT = 20
     DEFAULT_FALLBACK_ERROR_THRESHOLD = 2
@@ -51,6 +52,7 @@ class APIKeyRotator:
         google_tier_fallbacks=None,
         fallback_error_threshold: int = DEFAULT_FALLBACK_ERROR_THRESHOLD,
         fallback_cooldown_seconds: int = DEFAULT_FALLBACK_COOLDOWN_SECONDS,
+        allow_tier_escalation: bool = False,
     ):
         self.logger = logger
         self.google_models_limits = google_models_limits
@@ -59,6 +61,7 @@ class APIKeyRotator:
         self.google_tier_fallbacks = google_tier_fallbacks
         self.fallback_error_threshold = max(1, int(fallback_error_threshold))
         self.fallback_cooldown_seconds = max(1, int(fallback_cooldown_seconds))
+        self.allow_tier_escalation = bool(allow_tier_escalation)
 
         # Estruturas de dados separadas por TIER
         self._free_keys = []
@@ -90,7 +93,7 @@ class APIKeyRotator:
         self._regex_per_day = re.compile(r"(PerDay|Quota.*Day)", re.IGNORECASE)
         self._regex_per_minute = re.compile(r"(PerMinute|Quota.*Minute)", re.IGNORECASE)
         self._regex_invalid_key = re.compile(
-            r"(API_KEY_INVALID|key not valid|unauthorized)", re.IGNORECASE
+            r"(API_KEY_INVALID|key not valid)", re.IGNORECASE
         )
 
         # 1. Carregar Configuração de Modelos e Fallbacks por Tier (ENV ou Default)
@@ -105,15 +108,15 @@ class APIKeyRotator:
         """
         Infere o tier canônico ('lite', 'flash', 'pro', 'ultra') pelo nome do modelo,
         incluindo a nomenclatura de elementos químicos da família Gemini 4:
-        - carbon   -> ultra (Frontier #1 / Google AI Ultra)
-        - argon    -> pro   (Frontier Reasoning / Google AI Pro)
-        - hydrogen -> flash (Fast Agentic / Next-Gen Flash)
+        - carbon        -> ultra (Frontier #1 / Google AI Ultra)
+        - argon / neon  -> pro   (Frontier Reasoning / Google AI Pro)
+        - hydrogen      -> flash (Fast Agentic / Next-Gen Flash)
         - helium / flash-lite / lite -> lite
         """
         m = (model_name or "").lower()
         if "ultra" in m or "carbon" in m:
             return "ultra"
-        if "pro" in m or "argon" in m:
+        if "pro" in m or "argon" in m or "neon" in m:
             return "pro"
         if "flash-lite" in m or "lite" in m or "helium" in m:
             return "lite"
@@ -277,7 +280,19 @@ class APIKeyRotator:
             if not model_str:
                 continue
 
-            clean_model, _ = self._parse_model_key_and_tier(model_str)
+            clean_model, parsed_tier = self._parse_model_key_and_tier(model_str)
+            model_real_tier = self._model_tiers.get(clean_model) or parsed_tier
+
+            if not self.allow_tier_escalation and self.TIER_RANK.get(
+                model_real_tier, 99
+            ) > self.TIER_RANK.get(canonical_tier, -1):
+                self.logger.error(
+                    f"Fallback bloqueado em GOOGLE_TIER_FALLBACKS: '{clean_model}' "
+                    f"(tier '{model_real_tier}') excede o tier solicitado '{canonical_tier}'. "
+                    f"Escalonamento para tier superior é proibido sem autorização expressa."
+                )
+                continue
+
             self._tier_fallbacks[canonical_tier] = clean_model
 
             if clean_model not in self._model_limits:
@@ -286,7 +301,7 @@ class APIKeyRotator:
                     if explicit_limit is not None
                     else self.DEFAULT_FALLBACK_MODEL_LIMIT
                 )
-                self._model_tiers[clean_model] = canonical_tier
+                self._model_tiers[clean_model] = model_real_tier
                 self._fallback_only_models.add(clean_model)
             elif explicit_limit is not None:
                 self._model_limits[clean_model] = explicit_limit
@@ -299,7 +314,7 @@ class APIKeyRotator:
     def _get_model_weight(self, model_name: str) -> int:
         """
         Retorna o peso de custo/capacidade do modelo para ordenação:
-        lite (5) < flash (10) < hydrogen (15) < pro (80) < argon (85) < ultra (100) < carbon (105).
+        lite (5) < flash (10) < hydrogen (15) < pro (80) < neon (83) < argon (85) < ultra (100) < carbon (105).
         Respeita override explícito de tier em GOOGLE_MODEL_LIMITS.
         """
         m = model_name.lower()
@@ -310,7 +325,11 @@ class APIKeyRotator:
         if tier == "pro":
             if "carbon" in m:
                 return 90
-            return 85 if "argon" in m else 80
+            if "argon" in m:
+                return 85
+            if "neon" in m:
+                return 83
+            return 80
         if tier == "lite":
             return 5
         if tier == "flash":
@@ -498,6 +517,24 @@ class APIKeyRotator:
             return None
         return self.TIER_ALIASES.get(raw)
 
+    def _is_tier_escalation(self, candidate_model: str, max_allowed_tier: str) -> bool:
+        """Retorna True se candidate_model pertencer a um tier superior ao permitido."""
+        if not max_allowed_tier or self.allow_tier_escalation:
+            return False
+        candidate_tier = self.get_model_tier(candidate_model)
+        return self.TIER_RANK.get(candidate_tier, 99) > self.TIER_RANK.get(
+            max_allowed_tier, -1
+        )
+
+    def _get_lowest_primary_tier(self):
+        """Retorna o menor tier canônico presente nos modelos titulares."""
+        if not self._models:
+            return None
+        return min(
+            (self.get_model_tier(m) for m in self._models),
+            key=lambda t: self.TIER_RANK.get(t, 99),
+        )
+
     def _matches_model_filter(
         self,
         model: str,
@@ -507,6 +544,8 @@ class APIKeyRotator:
     ) -> bool:
         """
         Verifica se 'model' atende ao filtro solicitado por tier canônico ou por substring/exact_match.
+        Bloqueia escalonamento automático para tier superior sem autorização expressa
+        (allow_tier_escalation=True).
         """
         model_l = model.lower()
         model_tier = self._model_tiers.get(model) or self._infer_model_tier(model)
@@ -516,14 +555,14 @@ class APIKeyRotator:
             if requested_tier:
                 if model_tier == requested_tier:
                     return True
-                # Se pediu 'pro' e não há nenhum modelo 'pro' primário configurado na lista,
-                # permite fallback transparente para 'ultra' (ex: carbon).
-                primary_tiers = {
-                    self._model_tiers.get(m) or self._infer_model_tier(m)
-                    for m in self._models
-                }
-                if requested_tier == "pro" and "pro" not in primary_tiers:
-                    return model_tier == "ultra"
+                # Escalonamento de 'pro' -> 'ultra' somente com autorização expressa
+                if self.allow_tier_escalation and requested_tier == "pro":
+                    primary_tiers = {
+                        self._model_tiers.get(m) or self._infer_model_tier(m)
+                        for m in self._models
+                    }
+                    if "pro" not in primary_tiers:
+                        return model_tier == "ultra"
                 return False
 
         target = (variant_family or model_variant or "").strip().lower()
@@ -556,6 +595,20 @@ class APIKeyRotator:
 
         return False
 
+    def _try_allocate_specific_model_in_list(
+        self, keys_list, start_index, model: str, current_time: float
+    ):
+        """Tenta alocar um modelo específico em Round-Robin numa lista de chaves."""
+        count = len(keys_list)
+        if count == 0:
+            return None
+        for i in range(count):
+            idx = (start_index + i) % count
+            key = keys_list[idx]
+            if self._try_allocate_model_on_key(key, model, current_time):
+                return key
+        return None
+
     def select_and_reserve_best_slot(
         self,
         model_variant: str = None,
@@ -566,16 +619,16 @@ class APIKeyRotator:
     ):
         """
         Busca slot livre: 1º em Free Keys (RR), 2º em Paid Keys (RR).
-        Retorna: (key, model) ou (None, None) se tudo estiver ocupado.
+        Retorna: (key, model, tier) ou (None, None, None) se tudo estiver ocupado.
 
         Parâmetros:
         - model_variant: quando informado, filtra o modelo a ser alocado.
           Aceita tanto tiers canônicos ("lite", "flash-lite", "flash", "pro", "ultra")
-          quanto nomes/substrings de modelos ("carbon", "argon", "hydrogen", "gemini-4-argon").
+          quanto nomes/substrings de modelos ("carbon", "argon", "neon", "hydrogen", "gemini-4-argon").
         - variant_family: atalho sem versão. Aceita "ultra", "pro", "flash", "lite"/"flash-lite".
           Regras:
             * ultra -> modelos de tier ultra ("ultra", "carbon" ou tag ':ultra')
-            * pro   -> modelos de tier pro ("pro", "argon" ou tag ':pro')
+            * pro   -> modelos de tier pro ("pro", "argon", "neon" ou tag ':pro')
             * lite  -> modelos de tier lite ("flash-lite", "lite", "helium" ou tag ':lite')
             * flash -> modelos de tier flash ("flash" exceto lite, "hydrogen" ou tag ':flash')
           Quando informado, tem precedência sobre model_variant.
@@ -601,10 +654,45 @@ class APIKeyRotator:
         exact_match: bool = False,
         service_tier: str = "standard",
     ):
-        """Implementação interna de seleção de slot com isolamento de fallback por service_tier."""
+        """Implementação interna de seleção de slot com isolamento de fallback por service_tier e trava anti-escalonamento."""
         st = self._normalize_service_tier(service_tier)
+        requested_tier = (
+            None
+            if exact_match
+            else self._resolve_requested_tier(model_variant, variant_family)
+        )
         with self._lock:
             current_time = time.time()
+
+            # Prioridade de fallback ativo: tenta o modelo fallback em Free -> Paid antes
+            # de voltar ao modelo titular com falhas recentes (sem jamais escalonar tier).
+            if (
+                not exact_match
+                and requested_tier
+                and self._is_tier_fallback_active_unlocked(
+                    requested_tier, current_time, service_tier=st
+                )
+            ):
+                fb_model = self._tier_fallbacks.get(requested_tier)
+                if fb_model and not self._is_tier_escalation(fb_model, requested_tier):
+                    if not forced_paid:
+                        key = self._try_allocate_specific_model_in_list(
+                            self._free_keys, self._free_index, fb_model, current_time
+                        )
+                        if key:
+                            self._free_index = (self._free_index + 1) % len(
+                                self._free_keys
+                            )
+                            return key, fb_model, "free"
+                    if not forced_free:
+                        key = self._try_allocate_specific_model_in_list(
+                            self._paid_keys, self._paid_index, fb_model, current_time
+                        )
+                        if key:
+                            self._paid_index = (self._paid_index + 1) % len(
+                                self._paid_keys
+                            )
+                            return key, fb_model, "paid"
 
             # TIER 1: Tenta Free Keys
             if not forced_paid:
@@ -616,8 +704,20 @@ class APIKeyRotator:
                     variant_family,
                     exact_match,
                     service_tier=st,
+                    is_paid_list=False,
                 )
                 if key:
+                    if requested_tier and self._is_tier_escalation(
+                        model, requested_tier
+                    ):
+                        self._active_slots[key][model] = max(
+                            0, self._active_slots[key].get(model, 0) - 1
+                        )
+                        self.logger.critical(
+                            f"Trava anti-escalonamento bloqueou alocação de '{model}' "
+                            f"para tier solicitado '{requested_tier}'."
+                        )
+                        return None, None, None
                     self._free_index = (self._free_index + 1) % len(self._free_keys)
                     return key, model, "free"
 
@@ -631,8 +731,20 @@ class APIKeyRotator:
                     variant_family,
                     exact_match,
                     service_tier=st,
+                    is_paid_list=True,
                 )
                 if key:
+                    if requested_tier and self._is_tier_escalation(
+                        model, requested_tier
+                    ):
+                        self._active_slots[key][model] = max(
+                            0, self._active_slots[key].get(model, 0) - 1
+                        )
+                        self.logger.critical(
+                            f"Trava anti-escalonamento bloqueou alocação de '{model}' "
+                            f"para tier solicitado '{requested_tier}'."
+                        )
+                        return None, None, None
                     self._paid_index = (self._paid_index + 1) % len(self._paid_keys)
                     return key, model, "paid"
 
@@ -647,6 +759,7 @@ class APIKeyRotator:
         variant_family: str = None,
         exact_match: bool = False,
         service_tier: str = "standard",
+        is_paid_list: bool = False,
     ):
         """Helper para iterar numa lista circularmente (Round-Robin)."""
         count = len(keys_list)
@@ -658,10 +771,11 @@ class APIKeyRotator:
             if exact_match
             else self._resolve_requested_tier(model_variant, variant_family)
         )
+        raw_target = (variant_family or model_variant or "").strip()
 
         # Caso 1: exact_match pode selecionar inclusive modelos registrados apenas como fallback
         if exact_match:
-            target = (variant_family or model_variant or "").strip().lower()
+            target = raw_target.lower()
             if target:
                 for i in range(count):
                     idx = (start_index + i) % count
@@ -672,17 +786,26 @@ class APIKeyRotator:
                                 return key, model
                 return None, None
 
+        # Em chaves pagas, quando model_variant/variant_family é omitido (None/""),
+        # trava no menor tier configurado para impedir escalonamento silencioso
+        # (ex: lite -> flash -> pro) sem autorização expressa.
+        paid_unfiltered_max_tier = (
+            self._get_lowest_primary_tier()
+            if (is_paid_list and not exact_match and not raw_target and not self.allow_tier_escalation)
+            else None
+        )
+
         # Caso 2: Tier explícito com fallback ativo no cooldown daquele service_tier
         if requested_tier and self._is_tier_fallback_active_unlocked(
             requested_tier, current_time, service_tier=service_tier
         ):
             fb_model = self._tier_fallbacks.get(requested_tier)
-            if fb_model:
-                for i in range(count):
-                    idx = (start_index + i) % count
-                    key = keys_list[idx]
-                    if self._try_allocate_model_on_key(key, fb_model, current_time):
-                        return key, fb_model
+            if fb_model and not self._is_tier_escalation(fb_model, requested_tier):
+                key = self._try_allocate_specific_model_in_list(
+                    keys_list, start_index, fb_model, current_time
+                )
+                if key:
+                    return key, fb_model
 
         for i in range(count):
             idx = (start_index + i) % count
@@ -696,6 +819,11 @@ class APIKeyRotator:
                 ):
                     continue
 
+                if paid_unfiltered_max_tier and self._is_tier_escalation(
+                    model, paid_unfiltered_max_tier
+                ):
+                    continue
+
                 # Sem filtro de tier explícito (ex: model_variant=None): respeita fallback ativo do tier do modelo
                 if not exact_match and not requested_tier:
                     m_tier = self.get_model_tier(model)
@@ -703,8 +831,12 @@ class APIKeyRotator:
                         m_tier, current_time, service_tier=service_tier
                     ):
                         fb_model = self._tier_fallbacks.get(m_tier)
-                        if fb_model and self._try_allocate_model_on_key(
-                            key, fb_model, current_time
+                        if (
+                            fb_model
+                            and not self._is_tier_escalation(fb_model, m_tier)
+                            and self._try_allocate_model_on_key(
+                                key, fb_model, current_time
+                            )
                         ):
                             return key, fb_model
 

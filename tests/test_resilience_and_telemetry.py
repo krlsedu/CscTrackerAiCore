@@ -689,6 +689,170 @@ class TestId82AsyncTelemetryBatching(unittest.TestCase):
             fake_client.insert.assert_called_once()
             db.close()
 
+    @patch("csctracker_ai_core.service.ClickHouseDb.clickhouse_connect.get_client")
+    def test_sanitizes_none_fields_and_recovers_valid_rows_on_poison_pill_batch(
+        self, mock_get_client
+    ):
+        inserted_rows = []
+        client = MagicMock()
+
+        def flaky_insert(table, rows, column_names=None):
+            # Simula falha quando 'bad-event' está no lote (seja em batch ou unitário)
+            if any(r[1] == "bad-event" for r in rows):
+                raise RuntimeError("DataError: invalid row")
+            inserted_rows.extend(rows)
+
+        client.insert.side_effect = flaky_insert
+        mock_get_client.return_value = client
+
+        with patch.dict(
+            os.environ,
+            {
+                "CLICKHOUSE_ASYNC_TELEMETRY": "true",
+                "CLICKHOUSE_BATCH_SIZE": "3",
+                "CLICKHOUSE_FLUSH_INTERVAL_SECONDS": "30",
+            },
+            clear=False,
+        ):
+            db = ClickHouseDb(host="ch.local")
+            try:
+                # Sanitização de None em colunas não-Nullable
+                row, _ = db._build_telemetry_row(
+                    "evt-none",
+                    {"input": None, "image": None, "output": None, "reasoning": None},
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                    None,
+                )
+                self.assertEqual(row[2:6], [0, 0, 0, 0])
+                self.assertEqual(row[7:10], ["", "", ""])
+                self.assertEqual(row[10], 0.0)
+                self.assertEqual(row[11], "standard")
+
+                # Batch com 2 válidos + 1 poison pill -> fallback unitário salva os 2 válidos
+                self._sample_event(db, "ok-1")
+                self._sample_event(db, "bad-event")
+                self._sample_event(db, "ok-2")
+                self.assertTrue(db.flush(timeout=2.0))
+                self.assertEqual([r[1] for r in inserted_rows], ["ok-1", "ok-2"])
+            finally:
+                db.close()
+
+
+class TestHardGuardrailsAntiLoopAndNullSafety(unittest.TestCase):
+    @patch("csctracker_ai_core.service.IaProcessor.time.sleep")
+    @patch("csctracker_ai_core.service.IaProcessor.genai.Client")
+    def test_hard_cap_on_non_quota_retries_and_error_telemetry_logged(
+        self, mock_client_cls, _mock_sleep
+    ):
+        mock_client_cls.return_value.models.generate_content.side_effect = RuntimeError(
+            "503 backend timeout"
+        )
+        with patch.dict(
+            os.environ,
+            {
+                "GOOGLE_RETRY_BACKOFF_BASE_SECONDS": "0",
+                "GOOGLE_MAX_NON_QUOTA_ERRORS": "4",
+            },
+            clear=False,
+        ), patch("csctracker_ai_core.service.IaProcessor.ClickHouseDb") as ch_cls:
+            ch_instance = MagicMock()
+            ch_cls.return_value = ch_instance
+            # 10 chaves × 6 modelos = 62 tentativas potenciais, mas teto rígido limita a 5 chamadas!
+            proc = IaProcessor(
+                google_models_limits="gemini-4-argon=15,gemini-3.8-flash=50,gemini-3.1-flash-lite=500",
+                google_paid_keys=",".join(f"paid_{i}" for i in range(10)),
+                google_tier_fallbacks="pro=gemini-4-neon:15,flash=gemini-4-hydrogen:50,lite=gemini-3.5-flash-lite:500",
+            )
+            proc.click_house = ch_instance
+
+            with self.assertRaises(GeminiServiceException):
+                proc.analisar_com_gemini(
+                    input_text="msg",
+                    prompt="p",
+                    model_variant="lite",
+                    service_tier="flex",
+                )
+
+            # Jamais escalou para flash/pro/neon e parou após 5 chamadas (4 erros + 1 final)
+            called_models = [
+                c.kwargs["model"]
+                for c in mock_client_cls.return_value.models.generate_content.call_args_list
+            ]
+            self.assertEqual(len(called_models), 5)
+            self.assertTrue(
+                all(
+                    m in ("gemini-3.1-flash-lite", "gemini-3.5-flash-lite")
+                    for m in called_models
+                ),
+                f"Modelos inesperados chamados: {called_models}",
+            )
+            # Todas as 5 tentativas com falha foram registradas no ClickHouse
+            self.assertEqual(proc.click_house.log_event_telemetry.call_count, 5)
+            for call in proc.click_house.log_event_telemetry.call_args_list:
+                self.assertTrue(str(call.args[3]).startswith("ERROR [RuntimeError]:"))
+            proc.close()
+
+    @patch("csctracker_ai_core.service.IaProcessor.time.sleep")
+    @patch("csctracker_ai_core.service.IaProcessor.genai.Client")
+    def test_handles_none_tokens_none_text_and_string_modality_safely(
+        self, mock_client_cls, _mock_sleep
+    ):
+        resp_none = MagicMock()
+        resp_none.text = None
+        resp_none.usage_metadata = MagicMock()
+        resp_none.usage_metadata.prompt_token_count = None
+        resp_none.usage_metadata.candidates_token_count = None
+        resp_none.usage_metadata.thoughts_token_count = 120
+        modality_item = MagicMock()
+        modality_item.modality = "TEXT"
+        modality_item.token_count = None
+        resp_none.usage_metadata.prompt_tokens_details = [modality_item]
+
+        mock_client_cls.return_value.models.generate_content.return_value = resp_none
+
+        with patch.dict(
+            os.environ, {"GOOGLE_RETRY_BACKOFF_BASE_SECONDS": "0"}, clear=False
+        ), patch("csctracker_ai_core.service.IaProcessor.ClickHouseDb") as ch_cls:
+            ch_instance = MagicMock()
+            ch_cls.return_value = ch_instance
+            proc = IaProcessor(
+                google_models_limits="gemini-3.1-flash-lite=500",
+                google_paid_keys="paid_1",
+            )
+            proc.click_house = ch_instance
+
+            # 1) return_json=False: retorna "" sem lançar TypeError/AttributeError e grava telemetria
+            result, input_tokens, _ = proc.analisar_com_gemini(
+                input_text="hi",
+                prompt="p",
+                return_json=False,
+                model_variant="lite",
+            )
+            self.assertEqual(result, "")
+            self.assertEqual(input_tokens, 0)
+            proc.click_house.log_event_telemetry.assert_called_once()
+            logged_tokens = proc.click_house.log_event_telemetry.call_args.args[1]
+            self.assertEqual(logged_tokens["output"], 120)
+            self.assertEqual(logged_tokens["reasoning"], 120)
+            self.assertEqual(proc.click_house.log_event_telemetry.call_args.args[3], "")
+
+            # 2) return_json=True com response.text=None: trata como JSONDecodeError (não TypeError),
+            # grava telemetria e encerra no teto sem loop infinito
+            proc.click_house.log_event_telemetry.reset_mock()
+            with self.assertRaises(GeminiServiceException):
+                proc.analisar_com_gemini(
+                    input_text="hi",
+                    prompt="p",
+                    return_json=True,
+                    model_variant="lite",
+                )
+            self.assertEqual(proc.click_house.log_event_telemetry.call_count, 3)
+            proc.close()
+
 
 if __name__ == "__main__":
     unittest.main()

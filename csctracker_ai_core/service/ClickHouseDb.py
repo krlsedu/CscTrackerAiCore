@@ -219,22 +219,31 @@ class ClickHouseDb:
     ):
         if not payload:
             payload = {}
-        payload_json = json.dumps(payload, separators=(",", ":"))
+        payload_json = json.dumps(payload, separators=(",", ":"), default=str)
+        safe_tokens = tokens if isinstance(tokens, dict) else {}
+        result_str = "" if result is None else str(result)
+        model_str = "" if model_name is None else str(model_name)
+        task_str = "" if task is None else str(task)
+        service_tier_str = "standard" if service_tier is None else str(service_tier)
+        try:
+            time_spent_val = float(time_spent or 0.0)
+        except (TypeError, ValueError):
+            time_spent_val = 0.0
+
         row = [
             datetime.now(),
-            str(event_id),
-            tokens.get("input", 0),
-            tokens.get("image", 0),
-            tokens.get("output", 0),
-            tokens.get("reasoning", 0),
+            str(event_id or ""),
+            max(0, int(safe_tokens.get("input") or 0)),
+            max(0, int(safe_tokens.get("image") or 0)),
+            max(0, int(safe_tokens.get("output") or 0)),
+            max(0, int(safe_tokens.get("reasoning") or 0)),
             payload_json,
-            result,
-            model_name,
-            task,
-            time_spent,
-            service_tier,
+            result_str,
+            model_str,
+            task_str,
+            time_spent_val,
+            service_tier_str,
         ]
-        result_str = "" if result is None else str(result)
         approx_bytes = len(payload_json.encode("utf-8", errors="ignore")) + len(
             result_str.encode("utf-8", errors="ignore")
         )
@@ -266,6 +275,31 @@ class ClickHouseDb:
                     )
                     return True
                 except Exception as second_err:
+                    # Fallback linha-a-linha em batches > 1 para impedir que 1 evento
+                    # inválido (poison pill) descarte todos os demais eventos válidos.
+                    if len(batch) > 1:
+                        saved = 0
+                        dropped = 0
+                        for single_row in batch:
+                            try:
+                                client = self._get_persistent_client()
+                                client.insert(
+                                    "ai_events",
+                                    [single_row],
+                                    column_names=self.AI_EVENTS_COLUMNS,
+                                )
+                                saved += 1
+                            except Exception as row_err:
+                                dropped += 1
+                                logging.error(
+                                    f"Evento de telemetria '{single_row[1]}' descartado no fallback unitário: {row_err}"
+                                )
+                                self._reset_client()
+                        if saved > 0:
+                            logging.warning(
+                                f"Fallback unitário de telemetria concluiu: {saved} salvo(s), {dropped} descartado(s)."
+                            )
+                            return True
                     logging.error(
                         f"Observabilidade falhou após retry ({len(batch)} evento(s) descartados): {second_err}"
                     )

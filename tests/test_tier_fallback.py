@@ -105,17 +105,133 @@ class TestAPIKeyRotatorTierFallback(unittest.TestCase):
             self.assertEqual(rotator.get_tier_fallback("ultra"), "gemini-4-argon")
             self.assertEqual(rotator._model_limits["gemini-2.5-flash"], 20)
 
-    def test_pro_to_ultra_transparent_fallback_preserved_with_pro_tier_fallback(self):
-        rotator = APIKeyRotator(
+    def test_pro_to_ultra_escalation_blocked_by_default_and_allowed_only_with_flag(self):
+        rotator_strict = APIKeyRotator(
             self.logger,
             google_models_limits="gemini-4-carbon:ultra=2",
             google_paid_keys="paid_key_1",
             google_tier_fallbacks="pro=gemini-2.5-pro",
         )
-        # Sem erros: pedido 'pro' continua fazendo fallback transparente para 'ultra' primário
-        key, model, _ = rotator.select_and_reserve_best_slot(model_variant="pro")
+        # Padrão (allow_tier_escalation=False): pedir 'pro' NÃO pode escalar para 'ultra'
+        key_none, model_none, tier_none = rotator_strict.select_and_reserve_best_slot(
+            model_variant="pro"
+        )
+        self.assertEqual((key_none, model_none, tier_none), (None, None, None))
+
+        # Somente com autorização expressa (allow_tier_escalation=True) permite pro -> ultra
+        rotator_opt_in = APIKeyRotator(
+            self.logger,
+            google_models_limits="gemini-4-carbon:ultra=2",
+            google_paid_keys="paid_key_1",
+            google_tier_fallbacks="pro=gemini-2.5-pro",
+            allow_tier_escalation=True,
+        )
+        key, model, _ = rotator_opt_in.select_and_reserve_best_slot(model_variant="pro")
         self.assertEqual(model, "gemini-4-carbon")
+        rotator_opt_in.liberar_slot_model(key, model)
+
+    def test_strict_no_tier_escalation_across_lite_flash_pro_and_none_variant(self):
+        rotator = APIKeyRotator(
+            self.logger,
+            google_models_limits="gemini-4-argon=15,gemini-3.8-flash=50,gemini-3.1-flash-lite=500",
+            google_paid_keys="paid_key_1",
+            google_tier_fallbacks="pro=gemini-4-neon:15,flash=gemini-4-hydrogen:50,lite=gemini-3.5-flash-lite:500",
+        )
+
+        # Ativa fallback em todos os tiers
+        for primary, tier in [
+            ("gemini-3.1-flash-lite", "lite"),
+            ("gemini-3.8-flash", "flash"),
+            ("gemini-4-argon", "pro"),
+        ]:
+            rotator.registrar_erro_modelo(primary, tier, service_tier="flex")
+            rotator.registrar_erro_modelo(primary, tier, service_tier="flex")
+
+        # Suspende titular e fallback de lite -> lite e None/"" em chave paga NÃO podem subir para flash/pro/neon
+        rotator.suspender_modelo("paid_key_1", "gemini-3.1-flash-lite", 300)
+        rotator.suspender_modelo("paid_key_1", "gemini-3.5-flash-lite", 300)
+        for mv in ("lite", "flash-lite", None, ""):
+            self.assertEqual(
+                rotator._select_and_reserve_slot(
+                    model_variant=mv, forced_paid=True, service_tier="flex"
+                ),
+                (None, None, None),
+            )
+
+        # Suspende titular e fallback de flash -> flash NÃO pode subir para pro/neon
+        rotator.suspender_modelo("paid_key_1", "gemini-3.8-flash", 300)
+        rotator.suspender_modelo("paid_key_1", "gemini-4-hydrogen", 300)
+        self.assertEqual(
+            rotator._select_and_reserve_slot(
+                model_variant="flash", forced_paid=True, service_tier="flex"
+            ),
+            (None, None, None),
+        )
+
+        # Somente quem pede 'pro' explicitamente alcança gemini-4-neon
+        k_pro, m_pro, _ = rotator._select_and_reserve_slot(
+            model_variant="pro", forced_paid=True, service_tier="flex"
+        )
+        self.assertEqual(m_pro, "gemini-4-neon")
+        rotator.liberar_slot_model(k_pro, m_pro)
+
+    def test_blocks_upward_tier_fallbacks_and_maps_neon_to_pro(self):
+        self.assertEqual(APIKeyRotator._infer_model_tier("gemini-4-neon"), "pro")
+
+        rotator = APIKeyRotator(
+            self.logger,
+            google_models_limits="gemini-4-neon=15,gemini-3.8-flash=50,gemini-3.1-flash-lite=500",
+            google_paid_keys="paid_key_1",
+            google_tier_fallbacks="lite=gemini-4-neon,flash=gemini-4-argon,pro=gemini-4-neon,ultra=gemini-4-argon",
+        )
+        # gemini-4-neon em GOOGLE_MODEL_LIMITS sem ':pro' deve ser classificado como 'pro', nunca 'flash'
+        self.assertEqual(rotator.get_model_tier("gemini-4-neon"), "pro")
+        k_flash, m_flash, _ = rotator.select_and_reserve_best_slot(model_variant="flash")
+        self.assertEqual(m_flash, "gemini-3.8-flash")
+        rotator.liberar_slot_model(k_flash, m_flash)
+
+        # Fallbacks que escalam tier (lite->neon, flash->argon) são rejeitados
+        self.assertIsNone(rotator.get_tier_fallback("lite"))
+        self.assertIsNone(rotator.get_tier_fallback("flash"))
+        # Mesmo tier (pro->neon) e downgrade (ultra->argon) continuam aceitos
+        self.assertEqual(rotator.get_tier_fallback("pro"), "gemini-4-neon")
+        self.assertEqual(rotator.get_tier_fallback("ultra"), "gemini-4-argon")
+
+    def test_active_fallback_prefers_paid_fallback_when_free_fallback_suspended(self):
+        rotator = APIKeyRotator(
+            self.logger,
+            google_models_limits="gemini-4-argon=15",
+            google_free_keys="free_key_1",
+            google_paid_keys="paid_key_1",
+            google_tier_fallbacks="pro=gemini-4-neon",
+        )
+        rotator.suspender_modelo("free_key_1", "gemini-4-neon", 86400)
+        rotator.registrar_erro_modelo("gemini-4-argon", "pro")
+        rotator.registrar_erro_modelo("gemini-4-argon", "pro")
+
+        key, model, tier = rotator.select_and_reserve_best_slot(model_variant="pro")
+        self.assertEqual((key, model, tier), ("paid_key_1", "gemini-4-neon", "paid"))
         rotator.liberar_slot_model(key, model)
+
+    def test_unauthorized_error_does_not_remove_key_from_pool(self):
+        rotator = APIKeyRotator(
+            self.logger,
+            google_models_limits="gemini-3.1-flash-lite=500",
+            google_paid_keys="paid_key_1",
+        )
+        self.assertFalse(
+            rotator.processar_exception(
+                "paid_key_1", "gemini-3.1-flash-lite", RuntimeError("403 unauthorized")
+            )
+        )
+        self.assertEqual(rotator._paid_keys, ["paid_key_1"])
+
+        self.assertTrue(
+            rotator.processar_exception(
+                "paid_key_1", "gemini-3.1-flash-lite", RuntimeError("400 API_KEY_INVALID")
+            )
+        )
+        self.assertEqual(rotator._paid_keys, [])
 
     def test_two_consecutive_errors_activate_cooldown_and_expire(self):
         rotator = APIKeyRotator(

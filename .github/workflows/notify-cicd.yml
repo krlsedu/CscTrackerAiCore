@@ -1,0 +1,26 @@
+name: Notificar CscTracker CI/CD
+
+on:
+  push:
+    branches:
+      - "**"
+    tags-ignore:
+      - "v*"
+
+jobs:
+  notify-cicd:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enviar evento de push para o CscTrackerCicd
+        env:
+          TOKEN_CSCTRACKER: ${{ secrets.TOKEN_CSCTRACKER }}
+          CICD_WEBHOOK_URL: ${{ secrets.CICD_WEBHOOK_URL || vars.CICD_WEBHOOK_URL || 'https://cicd.csctracker.com/webhook' }}
+        run: |
+          if [ -z "${TOKEN_CSCTRACKER}" ]; then
+            echo "Erro: secret TOKEN_CSCTRACKER não configurado no GitHub (Settings > Secrets and variables > Actions)."
+            exit 1
+          fi
+          curl -fsS -X POST "${CICD_WEBHOOK_URL}" \
+            -H "Authorization: Bearer ${TOKEN_CSCTRACKER}" \
+            -H "Content-Type: application/json" \
+            --data-binary "@${GITHUB_EVENT_PATH}"

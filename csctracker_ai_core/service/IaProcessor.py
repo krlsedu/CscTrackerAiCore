@@ -32,6 +32,17 @@ def _parse_float_env(env_name: str, default: float, minimum: float = 0.0) -> flo
         return default
 
 
+def _parse_int_env(env_name: str, default: int, minimum: int = 1) -> int:
+    raw = os.getenv(env_name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        parsed = int(raw.strip())
+        return parsed if parsed >= minimum else default
+    except ValueError:
+        return default
+
+
 def _atexit_close_processor(proc_ref):
     proc = proc_ref()
     if proc is not None:
@@ -74,6 +85,8 @@ class IaProcessor:
     DEFAULT_TIMEOUT_FLEX_SECONDS = 600.0
     DEFAULT_RETRY_BACKOFF_BASE_SECONDS = 0.5
     DEFAULT_RETRY_BACKOFF_MAX_SECONDS = 4.0
+    DEFAULT_MAX_NON_QUOTA_ERRORS = 4
+    DEFAULT_MAX_NO_SLOT_RETRIES = 5
 
     def __init__(
         self,
@@ -85,6 +98,7 @@ class IaProcessor:
         google_free_keys=None,
         google_paid_keys=None,
         google_tier_fallbacks=None,
+        allow_tier_escalation: bool = False,
     ):
         self.logger = logging.getLogger()
         self.api_key_rotator = APIKeyRotator(
@@ -93,6 +107,7 @@ class IaProcessor:
             google_free_keys,
             google_paid_keys,
             google_tier_fallbacks=google_tier_fallbacks,
+            allow_tier_escalation=allow_tier_escalation,
         )
         self.click_house = ClickHouseDb(host, port, username, password)
 
@@ -115,6 +130,16 @@ class IaProcessor:
             "GOOGLE_RETRY_BACKOFF_MAX_SECONDS",
             self.DEFAULT_RETRY_BACKOFF_MAX_SECONDS,
             minimum=0.0,
+        )
+        self._max_non_quota_errors = _parse_int_env(
+            "GOOGLE_MAX_NON_QUOTA_ERRORS",
+            self.DEFAULT_MAX_NON_QUOTA_ERRORS,
+            minimum=1,
+        )
+        self._max_no_slot_retries = _parse_int_env(
+            "GOOGLE_MAX_NO_SLOT_RETRIES",
+            self.DEFAULT_MAX_NO_SLOT_RETRIES,
+            minimum=1,
         )
 
         self._clients = {}
@@ -219,16 +244,23 @@ class IaProcessor:
 
         self.estimate_tokens_rough(prompt_final)
 
+        requested_tier = rotator.resolve_requested_tier(model_variant)
+
         def _resolve_effective_tier(m_name: str) -> str:
-            req_tier = rotator.resolve_requested_tier(model_variant)
-            if req_tier and rotator.get_tier_fallback(req_tier):
-                return req_tier
+            if requested_tier and rotator.get_tier_fallback(requested_tier):
+                return requested_tier
             return rotator.get_model_tier(m_name)
 
-        # Loop de tentativas baseado na capacidade instalada
+        if not event_id:
+            event_id = str(uuid.uuid4())
+
+        # Loop de tentativas baseado na capacidade instalada, com teto rígido para
+        # erros não-cota e ausência de slots (impede loops longos em falha persistente)
         max_tentativas = rotator.get_total_capacity() + 2
         tentativa_atual = 0
         erros_transitorios_consecutivos = 0
+        erros_nao_cota_total = 0
+        sem_slot_consecutivos = 0
 
         while tentativa_atual < max_tentativas:
             tentativa_atual += 1
@@ -248,12 +280,17 @@ class IaProcessor:
                 )
 
             if not key:
+                sem_slot_consecutivos += 1
                 logger.warning("Nenhum slot disponível no momento. Aguardando...")
-                time.sleep(1)
-                if tentativa_atual >= max_tentativas:
+                if (
+                    sem_slot_consecutivos >= self._max_no_slot_retries
+                    or tentativa_atual >= max_tentativas
+                ):
                     break
+                time.sleep(1)
                 continue
 
+            sem_slot_consecutivos = 0
             slot_released = False
 
             def _release_slot_once():
@@ -262,6 +299,20 @@ class IaProcessor:
                     slot_released = True
                     rotator.liberar_slot_model(key, model_name)
 
+            # Trava dupla anti-escalonamento (defense-in-depth): jamais enviar tokens
+            # a um modelo de tier superior ao solicitado sem autorização expressa.
+            if requested_tier and rotator._is_tier_escalation(
+                model_name, requested_tier
+            ):
+                _release_slot_once()
+                logger.critical(
+                    f"Escalonamento bloqueado em IaProcessor: modelo '{model_name}' "
+                    f"excede o tier solicitado '{requested_tier}'."
+                )
+                break
+
+            _before = datetime.datetime.now()
+            telemetry_logged = False
             try:
                 client = self._get_client(key, timeout_ms)
                 contents = []
@@ -295,32 +346,39 @@ class IaProcessor:
                         service_tier=service_tier,
                     ),
                 )
-                _time_spent = datetime.datetime.now() - _before
-                _time_spent = _time_spent.total_seconds()
+                _time_spent = (datetime.datetime.now() - _before).total_seconds()
 
                 # Libera o slot imediatamente após o retorno do Gemini (antes de telemetria e parsing)
                 _release_slot_once()
 
-                input_tokens = response.usage_metadata.prompt_token_count
-                output_tokens = response.usage_metadata.candidates_token_count
-                reasoning_tokens = response.usage_metadata.thoughts_token_count
+                usage_metadata = getattr(response, "usage_metadata", None)
+                input_tokens = getattr(usage_metadata, "prompt_token_count", 0) or 0
+                candidates_tokens = (
+                    getattr(usage_metadata, "candidates_token_count", 0) or 0
+                )
+                reasoning_tokens = (
+                    getattr(usage_metadata, "thoughts_token_count", 0) or 0
+                )
+                output_tokens = candidates_tokens + reasoning_tokens
 
-                if not reasoning_tokens:
-                    reasoning_tokens = 0
-                output_tokens += reasoning_tokens
-
+                try:
+                    response_text = getattr(response, "text", None)
+                except Exception as text_err:
+                    logger.warning(f"Falha ao ler response.text do Gemini: {text_err}")
+                    response_text = None
                 if not output_tokens:
-                    logger.warning(f"No output tokens generated: {response.text}")
-                    output_tokens = 0
-                detalhes = response.usage_metadata.prompt_tokens_details
+                    logger.warning(f"No output tokens generated: {response_text}")
+
+                detalhes = getattr(usage_metadata, "prompt_tokens_details", None)
                 image_tokens = 0
                 if detalhes:
                     for item in detalhes:
-                        if item.modality == "IMAGE" or item.modality.name == "IMAGE":
-                            image_tokens = item.token_count
+                        modality = getattr(item, "modality", None)
+                        modality_name = getattr(modality, "name", modality)
+                        if modality_name == "IMAGE":
+                            image_tokens += getattr(item, "token_count", 0) or 0
 
-                if not event_id:
-                    event_id = str(uuid.uuid4())
+                telemetry_logged = True
                 self.click_house.log_event_telemetry(
                     event_id,
                     {
@@ -330,7 +388,7 @@ class IaProcessor:
                         "reasoning": reasoning_tokens,
                     },
                     prompt_final,
-                    response.text,
+                    response_text if response_text is not None else "",
                     f"{model_name}-{tier}",
                     task,
                     _time_spent,
@@ -339,11 +397,18 @@ class IaProcessor:
 
                 try:
                     if return_json:
-                        parsed_result = json.loads(response.text)
+                        if response_text is None:
+                            raise json.JSONDecodeError(
+                                "Resposta vazia (None) retornada pelo Gemini", "", 0
+                            )
+                        parsed_result = json.loads(response_text)
                     else:
-                        parsed_result = response.text
+                        parsed_result = (
+                            response_text if response_text is not None else ""
+                        )
                 except json.JSONDecodeError:
                     erros_transitorios_consecutivos = 0
+                    erros_nao_cota_total += 1
                     logger.error(
                         f"JSON inválido retornado pelo Gemini (Key: {key[:5]}...)"
                     )
@@ -352,6 +417,8 @@ class IaProcessor:
                         _resolve_effective_tier(model_name),
                         service_tier=service_tier,
                     )
+                    if erros_nao_cota_total > self._max_non_quota_errors:
+                        break
                     continue
 
                 rotator.registrar_sucesso_modelo(
@@ -364,6 +431,30 @@ class IaProcessor:
             except Exception as e:
                 _release_slot_once()
 
+                if not telemetry_logged:
+                    telemetry_logged = True
+                    _time_spent_err = (
+                        datetime.datetime.now() - _before
+                    ).total_seconds()
+                    try:
+                        self.click_house.log_event_telemetry(
+                            event_id,
+                            {
+                                "input": 0,
+                                "image": 0,
+                                "output": 0,
+                                "reasoning": 0,
+                            },
+                            prompt_final,
+                            f"ERROR [{type(e).__name__}]: {str(e)[:1000]}",
+                            f"{model_name}-{tier}",
+                            task,
+                            _time_spent_err,
+                            service_tier.lower(),
+                        )
+                    except Exception:
+                        pass
+
                 foi_erro_de_cota = rotator.processar_exception(key, model_name, e)
 
                 if foi_erro_de_cota:
@@ -374,18 +465,23 @@ class IaProcessor:
                     continue
                 else:
                     erros_transitorios_consecutivos += 1
+                    erros_nao_cota_total += 1
                     logger.error(f"Erro na API Gemini: {e}")
                     rotator.registrar_erro_modelo(
                         model_name,
                         _resolve_effective_tier(model_name),
                         service_tier=service_tier,
                     )
-                    if tentativa_atual < max_tentativas:
-                        delay = self._compute_transient_backoff(
-                            erros_transitorios_consecutivos
-                        )
-                        if delay > 0:
-                            time.sleep(delay)
+                    if (
+                        erros_nao_cota_total > self._max_non_quota_errors
+                        or tentativa_atual >= max_tentativas
+                    ):
+                        break
+                    delay = self._compute_transient_backoff(
+                        erros_transitorios_consecutivos
+                    )
+                    if delay > 0:
+                        time.sleep(delay)
                     continue
             finally:
                 _release_slot_once()
