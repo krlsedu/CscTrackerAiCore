@@ -6,8 +6,12 @@ VERSION = get_version()
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
-with open("requirements.txt") as f:
-    required = f.read().splitlines()
+with open("requirements.txt", "r", encoding="utf-8") as f:
+    required = [
+        line.strip()
+        for line in f
+        if line.strip() and not line.strip().startswith("#")
+    ]
 
 setuptools.setup(
     name="csctracker-ai-core",
@@ -53,15 +57,17 @@ setuptools.setup(
         "Topic :: System :: Logging",
         # Licença
         "License :: OSI Approved :: MIT License",
-        # Versões do Python suportadas (Alinhar com o README que diz 3.10+)
+        # Versões do Python suportadas (Python 3.11+ até 3.15)
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.10",
         "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
+        "Programming Language :: Python :: 3.14",
+        "Programming Language :: Python :: 3.15",
         # Sistema Operacional
         "Operating System :: OS Independent",
     ],
     install_requires=required,
-    python_requires=">=3.10",
+    python_requires=">=3.11",
     include_package_data=True,
 )

@@ -15,7 +15,6 @@ import weakref
 
 from google import genai
 from google.genai import types
-from google.genai._interactions.types import thinking_level
 
 from .ApiKeyRotator import APIKeyRotator
 from .ClickHouseDb import ClickHouseDb

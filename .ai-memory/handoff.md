@@ -2,7 +2,7 @@
 project: CscTrackerAiCore
 kind: handoff
 tier: working
-updated_at: 2026-11-22
+updated_at: 2026-11-23
 ---
 
 # 🤝 Handoff Ativo — `CscTrackerAiCore`
@@ -10,21 +10,19 @@ updated_at: 2026-11-22
 > **Escopo do Projeto:** Biblioteca central Python (`csctracker-ai-core`): rotação Free/Paid (`APIKeyRotator`), resolução estrita de tiers (`lite`, `flash`, `pro`, `ultra`) e telemetria no ClickHouse.
 
 ## 1. Onde Paramos / Contexto Atual (`WIP`)
-- Implementada a **ID 99** (`Por Publicar` — 36/36 testes unitários offline OK em `tests/test_tier_fallback.py` e `tests/test_resilience_and_telemetry.py`):
-  - **Trava anti-escalonamento de tier (`allow_tier_escalation=False` por padrão):** proibido sair de `lite → flash`, `flash → pro` ou `pro → ultra` sem autorização expressa; `model_variant=None`/`""` em chave paga travado no menor tier titular; `_load_tier_fallbacks()` rejeita fallbacks para tier superior; `"neon"` mapeado para `"pro"` (peso `83`); trava dupla em `ApiKeyRotator` e `IaProcessor`; prioridade Free → Paid no fallback ativo; removido `"unauthorized"` genérico de `_regex_invalid_key`.
-  - **Teto anti-loop:** `GOOGLE_MAX_NON_QUOTA_ERRORS` (default `4`) e `GOOGLE_MAX_NO_SLOT_RETRIES` (default `5`).
-  - **Telemetria blindada no ClickHouse:** proteção contra `None`/exceções em `usage_metadata`, `item.modality` e `response.text`; registro de falhas/timeouts em `ai_events` (`ERROR [Tipo]: ...`); sanitização contra `None` em `_build_telemetry_row()` e fallback linha a linha contra *poison pill* em `_insert_batch_with_retry()`.
-- Release `v26.47.002` publicada no GitHub (`605c5dd`) com a **ID 87** (sufixo `:limite` em `GOOGLE_TIER_FALLBACKS`).
-- Release `v26.47.001` publicada no GitHub/PyPI (`bf8e523`) com as **IDs 79, 80, 81 e 82**.
+- **[2026-11-23] Implementada a ID 97 (`Por Publicar` — 36/36 testes unitários offline OK + `python -m build` OK em Python `3.15.2`):**
+  - Removido import privado quebrado `from google.genai._interactions.types import thinking_level` em `csctracker_ai_core/service/IaProcessor.py` (`ModuleNotFoundError` no `google-genai 3.6.1`).
+  - Atualizado `requirements.txt` para `csctracker-py-core>=26.47.3`, `clickhouse-connect>=1.13.0,<2` e `google-genai>=3.6.0,<4` (removido `protobuf==6.33.5`, sem uso direto).
+  - Atualizados `setup.py` (`python_requires=">=3.11"`, classifiers `3.11`–`3.15`), `setup.cfg` (`description_file = README.md`), criado `MANIFEST.in`, modernizado `.github/workflows/build.yml` (Python `3.15` + `unittest` + `python -m build`) e atualizado `README.md`.
+- **[2026-11-22] Release `v26.47.003` publicada (`dae0a0b` / `26.47.3`, `Em Homologação`)** com a **ID 99** (trava anti-escalonamento de tier, tetos anti-loop `GOOGLE_MAX_NON_QUOTA_ERRORS`/`GOOGLE_MAX_NO_SLOT_RETRIES` e telemetria resiliente contra `None`/*poison pill*).
 
 ## 2. Tentativas Descartadas / O que Falhou (`Failed Approaches`)
 - Na `v26.47.001` (em `CscTrackerIA v26.47.001`), o fallback `lite=gemini-3.5-flash-lite` entrou com `DEFAULT_FALLBACK_MODEL_LIMIT=20` (caindo de 500 para 20 slots), somado à ausência de telemetria de falhas/timeouts, risco de *poison pill* no batch do ClickHouse e brecha de escalonamento em `model_variant=None`/`""`. Tudo corrigido na ID 99.
 
 ## 3. Estado dos Arquivos / Branch / Build
-- **Fonte Primária:** GitHub (`master`, com espelho `.zip` em `projects/repositorys/CscTrackerAiCore/CscTrackerAiCore-master.zip`).
-- **Arquivos Alterados:** `csctracker_ai_core/service/ApiKeyRotator.py`, `csctracker_ai_core/service/IaProcessor.py`, `csctracker_ai_core/service/ClickHouseDb.py`, `tests/test_tier_fallback.py`, `tests/test_resilience_and_telemetry.py`, `README.md`, `.agents/skills/csctracker/SKILL.md`, `.github/workflows/notify-cicd.yml`, `.ai-memory/*`.
+- **Fonte Primária:** GitHub (`master`, com espelho `.zip` em `projects/repositorys/CscTrackerAiCore/`).
+- **Testes e Build offline:** `python -B -m unittest discover -s tests -v` (`36/36` passando em `0.781s`) e `python -m build` OK em Python `3.15.2`.
 
 ## 4. Próximos Passos / Pendências Abertas
-- Publicar nova release (`v26.47.003` via `CscTrackerCicd`) da biblioteca `csctracker-ai-core` contendo a **ID 99** + **ID 87**.
-- Atualizar `CscTrackerIA` para consumir a nova versão do `csctracker-ai-core` (junto à blindagem de `/analyze` — ID 100) e configurar `:limite` no compose (`lite=gemini-3.5-flash-lite:500`).
-- Validar em homologação os custos históricos da rota `/ai-costs` (**ID 54**).
+- Disparar nova release/tag (`v26.47.004` / `26.47.4`) no GitHub/PyPI contendo a **ID 97** (Python `3.15` + `csctracker-py-core>=26.47.3` + `google-genai>=3.6` + `clickhouse-connect>=1.13`).
+- Validar em homologação os custos históricos da rota `/ai-costs` (**ID 54**) e atacar evoluções futuras (**IDs 83, 84, 85**).
