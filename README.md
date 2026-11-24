@@ -27,7 +27,7 @@ CscTrackerAiCore é uma biblioteca Python desenvolvida para facilitar a integra�
 - Python 3.11+ (validado até Python 3.15)
 - Google GenAI SDK (`google-genai>=3.6.0,<4`)
 - ClickHouse Connect (`clickhouse-connect>=1.13.0,<2`)
-- CscTrackerPyCore (`csctracker-py-core>=26.47.3`)
+- CscTrackerPyCore (`csctracker-py-core>=26.48.1`)
 
 ## Instalação
 
