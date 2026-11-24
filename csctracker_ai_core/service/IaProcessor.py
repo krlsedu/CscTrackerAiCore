@@ -16,6 +16,11 @@ import weakref
 from google import genai
 from google.genai import types
 
+try:
+    from csctracker_py_core.utils.request_info import RequestInfo
+except ImportError:  # pragma: no cover
+    RequestInfo = None
+
 from .ApiKeyRotator import APIKeyRotator
 from .ClickHouseDb import ClickHouseDb
 
@@ -51,6 +56,20 @@ def _atexit_close_processor(proc_ref):
             pass
 
 
+def _parse_allowed_users(allowed_users) -> set:
+    if not allowed_users:
+        return set()
+    if isinstance(allowed_users, str):
+        items = allowed_users.split(",")
+    else:
+        items = allowed_users
+    return {
+        item.strip().lower()
+        for item in items
+        if isinstance(item, str) and item.strip()
+    }
+
+
 class GeminiServiceException(Exception):
     """
     Represents a custom exception for the Gemini service.
@@ -61,6 +80,15 @@ class GeminiServiceException(Exception):
     """
 
     pass
+
+
+class UnauthorizedUserException(GeminiServiceException):
+    """
+    Exceção lançada quando o usuário autenticado (ou anônimo) não está na lista
+    `allowed_users` e não há pool FREE disponível (ou `forced_paid=True`).
+    """
+
+    status_code = 403
 
 
 class IaProcessor:
@@ -98,8 +126,10 @@ class IaProcessor:
         google_paid_keys=None,
         google_tier_fallbacks=None,
         allow_tier_escalation: bool = False,
+        allowed_users=None,
     ):
         self.logger = logging.getLogger()
+        self.allowed_users = _parse_allowed_users(allowed_users)
         self.api_key_rotator = APIKeyRotator(
             self.logger,
             google_models_limits,
@@ -209,6 +239,12 @@ class IaProcessor:
         exp_delay = min(base * (2 ** (erro_consecutivo - 1)), max_delay)
         return exp_delay + random.uniform(0.0, 0.3)
 
+    def _get_current_user_email(self):
+        if RequestInfo is None or not hasattr(RequestInfo, "get_user_email"):
+            return None
+        email = RequestInfo.get_user_email()
+        return email.strip().lower() if isinstance(email, str) and email.strip() else None
+
     def analisar_com_gemini(
         self,
         input_text: str = "",
@@ -230,6 +266,25 @@ class IaProcessor:
         """
         logger = self.logger
         rotator = self.api_key_rotator
+
+        user_restricted_to_free = False
+        if self.allowed_users:
+            user_email = self._get_current_user_email()
+            if not user_email or user_email not in self.allowed_users:
+                if forced_paid or not rotator._free_keys:
+                    logger.warning(
+                        f"Acesso negado a recursos de IA para usuário não autorizado "
+                        f"(email={user_email or 'desconhecido'}, forced_paid={forced_paid})."
+                    )
+                    raise UnauthorizedUserException(
+                        "Usuário não autorizado a consumir recursos de IA."
+                    )
+                logger.info(
+                    f"Usuário não autorizado (email={user_email or 'desconhecido'}); "
+                    f"restringindo execução estritamente ao pool FREE."
+                )
+                forced_free = True
+                user_restricted_to_free = True
 
         if not service_tier or service_tier.lower() not in ("flex", "standard"):
             service_tier = "standard"
@@ -484,6 +539,14 @@ class IaProcessor:
                     continue
             finally:
                 _release_slot_once()
+
+        if user_restricted_to_free:
+            logger.warning(
+                "Pool FREE indisponível para usuário não autorizado. Retornando UnauthorizedUserException."
+            )
+            raise UnauthorizedUserException(
+                "Usuário não autorizado a consumir recursos de IA."
+            )
 
         logger.error("Todas as tentativas de conexão com o Gemini falharam.")
         raise GeminiServiceException(
